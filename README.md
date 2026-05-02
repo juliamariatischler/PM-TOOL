@@ -1,36 +1,149 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PM Tool — Full-Stack Project Management App
 
-## Getting Started
+A modern, production-ready project management application inspired by Wrike. Built with Next.js 16 App Router, Prisma 7 (SQLite), Zustand, Tailwind CSS v4, and shadcn/ui primitives.
 
-First, run the development server:
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16 (App Router) + React 19 + TypeScript |
+| Styling | Tailwind CSS v4 + shadcn/ui |
+| State | Zustand |
+| Icons | Lucide React |
+| Drag & Drop | @dnd-kit/core + @dnd-kit/sortable |
+| Backend | Next.js API Routes |
+| ORM | Prisma 7 (driver adapter model) |
+| Database | SQLite via @libsql/client |
+
+---
+
+## Features
+
+- **Table View** — spreadsheet-like with hierarchical tasks (Space → Folder → Project → Task → Subtask), sortable columns, status dropdowns, assignee avatars, date fields, priority, cost, effort
+- **Board View** — Kanban columns by status with drag-and-drop card reordering
+- **Workload View** — weekly capacity grid showing each team member's daily load (%), overloaded days in red, expandable task bars
+- **Task Detail Panel** — slide-over panel with editable title, status, assignee, dates, priority, effort, cost, description, subtask list, comment input
+- **Global Search** — ⌘K command palette searching all tasks across all spaces
+- **Left Sidebar** — collapsible, dark-themed, hierarchical space/folder/project navigation, notification badge
+- **Filters** — status multi-select + assignee filter + text search
+- **Optimistic UI** — task status and field updates reflect instantly, then sync in background
+- **Gantt / Dashboard** — stubbed with "Coming soon" placeholder
+
+### Data Model
+
+- **2 Spaces**: Manufacturing, Creative Development
+- **6 Folders** (3 per space)
+- **10 Projects**
+- **38+ Tasks** with mixed statuses, priorities, dates, and costs
+- **3 Users**: Amy W., Julia H., Jason S.
+
+---
+
+## Setup
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Install & Run
 
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Run database migration (creates dev.db)
+npm run db:migrate
+
+# 3. Seed with realistic demo data
+npm run db:seed
+
+# 4. Start the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Available Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Production build |
+| `npm run start` | Start production server |
+| `npm run db:migrate` | Run Prisma migrations |
+| `npm run db:seed` | Seed the database |
+| `npm run db:reset` | Reset DB and re-seed |
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## API Endpoints
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/spaces` | All spaces with full hierarchy |
+| POST | `/api/spaces` | Create space |
+| PATCH | `/api/spaces/:id` | Update space |
+| DELETE | `/api/spaces/:id` | Delete space (cascades) |
+| POST | `/api/folders` | Create folder |
+| PATCH | `/api/folders/:id` | Update folder |
+| DELETE | `/api/folders/:id` | Delete folder |
+| POST | `/api/projects` | Create project |
+| PATCH | `/api/projects/:id` | Update project |
+| DELETE | `/api/projects/:id` | Delete project |
+| GET | `/api/tasks/:id` | Get single task with subtasks |
+| POST | `/api/tasks` | Create task |
+| PATCH | `/api/tasks/:id` | Update task (status, dates, assignee, etc.) |
+| DELETE | `/api/tasks/:id` | Delete task |
+| GET | `/api/users` | All users |
+| POST | `/api/users` | Create user |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├── app/
+│   ├── api/               # REST API routes
+│   │   ├── spaces/
+│   │   ├── folders/
+│   │   ├── projects/
+│   │   ├── tasks/
+│   │   └── users/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── globals.css
+├── components/
+│   ├── AppShell.tsx       # Root client component (data loader)
+│   ├── sidebar/
+│   ├── toolbar/
+│   ├── table/             # Table View
+│   ├── board/             # Kanban View
+│   ├── workload/          # Workload View
+│   ├── task-detail/       # Task Detail Panel
+│   └── ui/                # Shared primitives
+├── store/
+│   └── useAppStore.ts     # Zustand global store
+├── lib/
+│   ├── prisma.ts          # Prisma client singleton
+│   └── utils.ts           # cn(), STATUS_CONFIG, formatDate, etc.
+└── types/
+    └── index.ts           # TypeScript interfaces
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+prisma/
+├── schema.prisma
+├── seed.ts
+└── migrations/
+```
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘K` | Open global search |
+| `Escape` | Close search / detail panel |
