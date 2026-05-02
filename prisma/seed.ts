@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { hashPassword } from "../src/lib/password";
 
 const adapter = new PrismaLibSql({ url: "file:./dev.db" });
 const prisma = new PrismaClient({ adapter } as any);
@@ -26,13 +27,28 @@ async function main() {
 
   // Users
   const amy = await prisma.user.create({
-    data: { name: "Amy W.", email: "amy@example.com", color: "#f59e0b" },
+    data: {
+      name: "Rafaela Kamper",
+      email: "office@am-sonnenhof.at",
+      color: "#f59e0b",
+      passwordHash: hashPassword("Rafaela1234!"),
+    },
   });
   const julia = await prisma.user.create({
-    data: { name: "Julia H.", email: "julia@example.com", color: "#6366f1" },
+    data: {
+      name: "Julia Tischler",
+      email: "juliamariatischler@gmail.com",
+      color: "#00B050",
+      passwordHash: hashPassword("Julia1234!"),
+    },
   });
   const jason = await prisma.user.create({
-    data: { name: "Jason S.", email: "jason@example.com", color: "#10b981" },
+    data: {
+      name: "Jason S.",
+      email: "jason@example.com",
+      color: "#10b981",
+      passwordHash: hashPassword("Jason1234!"),
+    },
   });
 
   const users = [amy, julia, jason];

@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
+import { requireApiSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
+  if (!(await requireApiSessionUser())) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   const body = await req.json();
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+
+  if (!title || !body.projectId) {
+    return NextResponse.json({ error: "title and projectId are required" }, { status: 400 });
+  }
+
   const task = await prisma.task.create({
     data: {
-      title: body.title,
+      title,
       projectId: body.projectId,
       status: body.status ?? "New",
       assigneeId: body.assigneeId ?? null,

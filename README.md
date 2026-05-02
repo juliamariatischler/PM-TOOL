@@ -16,6 +16,7 @@ A modern, production-ready project management application inspired by Wrike. Bui
 | Backend | Next.js API Routes |
 | ORM | Prisma 7 (driver adapter model) |
 | Database | SQLite via @libsql/client |
+| Mobile Shell | Capacitor 8 |
 
 ---
 
@@ -73,6 +74,11 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `npm run dev` | Start development server |
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
+| `npm run cap:sync` | Sync web assets/plugins to both native shells |
+| `npm run cap:sync:ios` | Sync only the iOS shell |
+| `npm run cap:sync:android` | Sync only the Android shell |
+| `npm run cap:open:ios` | Open the iOS project in Xcode |
+| `npm run cap:open:android` | Open the Android project in Android Studio |
 | `npm run db:migrate` | Run Prisma migrations |
 | `npm run db:seed` | Seed the database |
 | `npm run db:reset` | Reset DB and re-seed |
@@ -105,6 +111,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Project Structure
 
 ```
+android/                    # Capacitor Android project
+ios/                        # Capacitor iOS project
+capacitor.config.ts         # Capacitor config
 src/
 ├── app/
 │   ├── api/               # REST API routes
@@ -127,6 +136,9 @@ src/
 │   └── ui/                # Shared primitives
 ├── store/
 │   └── useAppStore.ts     # Zustand global store
+├── services/
+│   ├── platform/          # Runtime detection (web / iOS / Android)
+│   └── health/            # Platform-specific health integrations
 ├── lib/
 │   ├── prisma.ts          # Prisma client singleton
 │   └── utils.ts           # cn(), STATUS_CONFIG, formatDate, etc.
@@ -138,6 +150,12 @@ prisma/
 ├── seed.ts
 └── migrations/
 ```
+
+## Mobile Notes
+
+This repo now follows a one-repo web + mobile structure with shared app code in `src/` and native shells in `ios/` and `android/`.
+
+Important: the current app uses Next.js API routes plus Prisma-backed SQLite. That means Capacitor cannot yet ship this as a simple static bundle without additional architecture work. See [docs/mobile-setup.md](docs/mobile-setup.md) for the exact constraints and workflow.
 
 ---
 
