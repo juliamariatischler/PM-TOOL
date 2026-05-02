@@ -147,3 +147,4 @@ prisma/
 |----------|--------|
 | `⌘K` | Open global search |
 | `Escape` | Close search / detail panel |
+# PM-TOOL
