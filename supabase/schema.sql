@@ -52,6 +52,7 @@ create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   status text not null default 'New',
+  created_by uuid references public.users(id) on delete set null,
   assignee_id uuid references public.users(id) on delete set null,
   start_date timestamptz,
   due_date timestamptz,
@@ -61,6 +62,8 @@ create table if not exists public.tasks (
   position integer not null default 0,
   priority text not null default 'Medium',
   effort double precision not null default 0,
+  actual_time_minutes integer not null default 0,
+  timer_started_at timestamptz,
   planned_cost double precision not null default 0,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -83,6 +86,27 @@ create table if not exists public.task_comment_mentions (
   unique (comment_id, mentioned_user_id)
 );
 
+create table if not exists public.task_documents (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  provider text not null default 'microsoft',
+  document_type text not null default 'file',
+  title text not null,
+  url text not null,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.microsoft_connections (
+  user_id uuid primary key references public.users(id) on delete cascade,
+  email text,
+  access_token text not null,
+  refresh_token text,
+  expires_at timestamptz,
+  drive_id text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists folders_space_id_idx on public.folders(space_id);
 create index if not exists projects_folder_id_idx on public.projects(folder_id);
 create index if not exists tasks_project_id_idx on public.tasks(project_id);
@@ -91,6 +115,7 @@ create index if not exists tasks_assignee_id_idx on public.tasks(assignee_id);
 create index if not exists task_comments_task_id_idx on public.task_comments(task_id);
 create index if not exists task_comment_mentions_user_id_idx on public.task_comment_mentions(mentioned_user_id);
 create index if not exists task_comment_mentions_comment_id_idx on public.task_comment_mentions(comment_id);
+create index if not exists task_documents_task_id_idx on public.task_documents(task_id);
 
 drop trigger if exists spaces_set_updated_at on public.spaces;
 create trigger spaces_set_updated_at
@@ -116,6 +141,12 @@ before update on public.tasks
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists microsoft_connections_set_updated_at on public.microsoft_connections;
+create trigger microsoft_connections_set_updated_at
+before update on public.microsoft_connections
+for each row
+execute function public.set_updated_at();
+
 alter table public.users enable row level security;
 alter table public.spaces enable row level security;
 alter table public.folders enable row level security;
@@ -123,6 +154,8 @@ alter table public.projects enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_comments enable row level security;
 alter table public.task_comment_mentions enable row level security;
+alter table public.task_documents enable row level security;
+alter table public.microsoft_connections enable row level security;
 
 drop policy if exists "users can read own profile" on public.users;
 create policy "users can read own profile"
@@ -235,3 +268,33 @@ on public.task_comment_mentions
 for insert
 to authenticated
 with check (true);
+
+drop policy if exists "authenticated can read task documents" on public.task_documents;
+create policy "authenticated can read task documents"
+on public.task_documents
+for select
+to authenticated
+using (true);
+
+drop policy if exists "authenticated can write task documents" on public.task_documents;
+create policy "authenticated can write task documents"
+on public.task_documents
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "users can read own microsoft connection" on public.microsoft_connections;
+create policy "users can read own microsoft connection"
+on public.microsoft_connections
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "users can write own microsoft connection" on public.microsoft_connections;
+create policy "users can write own microsoft connection"
+on public.microsoft_connections
+for all
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);

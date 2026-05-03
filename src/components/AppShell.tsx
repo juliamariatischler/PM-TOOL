@@ -14,7 +14,7 @@ import { MobilePlatformNotice } from "@/components/mobile/MobilePlatformNotice";
 import { Loader2, FolderOpen, LogOut, Plus } from "lucide-react";
 import { CreateSpaceDialog } from "@/components/sidebar/CreateSpaceDialog";
 
-export function AppShell({ currentUser }: { currentUser: { name: string; email: string } }) {
+export function AppShell({ currentUser }: { currentUser: { id: string; name: string; email: string } }) {
   const { setSpaces, setUsers, setInboxItems, activeView, selectedSpaceId, spaces } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
@@ -49,7 +49,7 @@ export function AppShell({ currentUser }: { currentUser: { name: string; email: 
 
   return (
     <div className="flex h-full bg-white overflow-hidden">
-      <Sidebar onCreateSpace={() => setCreateSpaceOpen(true)} onReload={reload} />
+      <Sidebar currentUserId={currentUser.id} onCreateSpace={() => setCreateSpaceOpen(true)} onReload={reload} />
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <MobilePlatformNotice />
 

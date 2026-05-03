@@ -71,6 +71,7 @@ export function TableView() {
       .filter((task) => {
         if (filters.status.length && !filters.status.includes(task.status)) return false;
         if (filters.assigneeId.length && !filters.assigneeId.includes(task.assigneeId ?? "")) return false;
+        if (filters.createdById.length && !filters.createdById.includes(task.createdById ?? "")) return false;
         if (filters.search && !task.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
         return true;
       })
@@ -133,6 +134,7 @@ export function TableView() {
       id: `temp-${Date.now()}`,
       title,
       status: "New",
+      createdById: null,
       assigneeId,
       assignee,
       startDate,
@@ -144,6 +146,8 @@ export function TableView() {
       position: 999,
       priority,
       effort,
+      actualTimeMinutes: 0,
+      timerStartedAt: null,
       plannedCost,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

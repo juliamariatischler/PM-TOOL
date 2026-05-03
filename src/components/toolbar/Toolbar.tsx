@@ -75,9 +75,9 @@ export function Toolbar() {
           >
             <Filter className="h-3.5 w-3.5" />
             Filter
-            {(filters.status.length + filters.assigneeId.length) > 0 && (
+            {(filters.status.length + filters.assigneeId.length + filters.createdById.length) > 0 && (
               <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#00B050] text-[10px] font-bold text-white">
-                {filters.status.length + filters.assigneeId.length}
+                {filters.status.length + filters.assigneeId.length + filters.createdById.length}
               </span>
             )}
           </button>
@@ -131,7 +131,7 @@ export function Toolbar() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setFilter("status", []); setFilter("assigneeId", []); }}
+                  onClick={() => { setFilter("status", []); setFilter("assigneeId", []); setFilter("createdById", []); }}
                   className="text-xs text-gray-400 hover:text-red-500"
                 >
                   Clear all filters

@@ -1,4 +1,14 @@
-import type { Folder, InboxItem, Project, Space, Task, TaskComment, User } from "@/types";
+import type {
+  Folder,
+  InboxItem,
+  MicrosoftConnectionStatus,
+  Project,
+  Space,
+  Task,
+  TaskComment,
+  TaskDocument,
+  User,
+} from "@/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type DbUserRow = {
@@ -43,6 +53,7 @@ type DbTaskRow = {
   id: string;
   title: string;
   status: string;
+  created_by: string | null;
   assignee_id: string | null;
   start_date: string | null;
   due_date: string | null;
@@ -52,6 +63,8 @@ type DbTaskRow = {
   position: number;
   priority: string;
   effort: number;
+  actual_time_minutes: number;
+  timer_started_at: string | null;
   planned_cost: number;
   created_at: string;
   updated_at: string;
@@ -73,6 +86,27 @@ type DbCommentMentionRow = {
   created_at: string;
 };
 
+type DbTaskDocumentRow = {
+  id: string;
+  task_id: string;
+  provider: "microsoft";
+  document_type: "word" | "excel" | "powerpoint" | "file";
+  title: string;
+  url: string;
+  created_at: string;
+};
+
+type DbMicrosoftConnectionRow = {
+  user_id: string;
+  email: string | null;
+  access_token: string;
+  refresh_token: string | null;
+  expires_at: string | null;
+  drive_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 function mapUser(row: DbUserRow): User {
   return {
     id: row.id,
@@ -89,6 +123,7 @@ function mapTask(row: DbTaskRow, usersById: Map<string, User>): Task {
     id: row.id,
     title: row.title,
     status: row.status,
+    createdById: row.created_by,
     assigneeId: row.assignee_id,
     assignee: row.assignee_id ? usersById.get(row.assignee_id) ?? null : null,
     startDate: row.start_date,
@@ -100,9 +135,23 @@ function mapTask(row: DbTaskRow, usersById: Map<string, User>): Task {
     position: row.position,
     priority: row.priority,
     effort: row.effort,
+    actualTimeMinutes: row.actual_time_minutes,
+    timerStartedAt: row.timer_started_at,
     plannedCost: row.planned_cost,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapTaskDocument(row: DbTaskDocumentRow): TaskDocument {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    provider: row.provider,
+    documentType: row.document_type,
+    title: row.title,
+    url: row.url,
+    createdAt: row.created_at,
   };
 }
 
@@ -245,6 +294,111 @@ export async function listTaskComments(taskId: string) {
     .filter((comment): comment is TaskComment => comment !== null);
 }
 
+export async function listTaskDocuments(taskId: string) {
+  const admin = getSupabaseAdminClient();
+  const rows = await runQuery<DbTaskDocumentRow[]>(
+    admin
+      .from("task_documents")
+      .select("id, task_id, provider, document_type, title, url, created_at")
+      .eq("task_id", taskId)
+      .order("created_at", { ascending: false })
+  );
+
+  return (rows ?? []).map((row) => mapTaskDocument(row));
+}
+
+export async function createTaskDocument(input: {
+  taskId: string;
+  provider: "microsoft";
+  documentType: "word" | "excel" | "powerpoint" | "file";
+  title: string;
+  url: string;
+}) {
+  const admin = getSupabaseAdminClient();
+  const row = ensurePresent(
+    await runQuery<DbTaskDocumentRow>(
+      admin
+        .from("task_documents")
+        .insert({
+          task_id: input.taskId,
+          provider: input.provider,
+          document_type: input.documentType,
+          title: input.title,
+          url: input.url,
+        })
+        .select("id, task_id, provider, document_type, title, url, created_at")
+        .single()
+    ),
+    "Unable to create task document"
+  );
+
+  return mapTaskDocument(row);
+}
+
+export async function deleteTaskDocument(id: string) {
+  const admin = getSupabaseAdminClient();
+  await runQuery(admin.from("task_documents").delete().eq("id", id).select("id").single());
+}
+
+export async function getMicrosoftConnectionStatus(userId: string): Promise<MicrosoftConnectionStatus> {
+  const admin = getSupabaseAdminClient();
+  const row = await runQuery<DbMicrosoftConnectionRow | null>(
+    admin
+      .from("microsoft_connections")
+      .select("user_id, email, access_token, refresh_token, expires_at, drive_id, created_at, updated_at")
+      .eq("user_id", userId)
+      .maybeSingle()
+  );
+
+  if (!row) {
+    return {
+      connected: false,
+      configured: Boolean(
+        process.env.MICROSOFT_CLIENT_ID &&
+          process.env.MICROSOFT_CLIENT_SECRET &&
+          process.env.MICROSOFT_REDIRECT_URI
+      ),
+      email: null,
+      expiresAt: null,
+    };
+  }
+
+  return {
+    connected: true,
+    configured: true,
+    email: row.email,
+    expiresAt: row.expires_at,
+  };
+}
+
+export async function upsertMicrosoftConnection(input: {
+  userId: string;
+  email: string | null;
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: string | null;
+  driveId: string | null;
+}) {
+  const admin = getSupabaseAdminClient();
+  await runQuery(
+    admin
+      .from("microsoft_connections")
+      .upsert(
+        {
+          user_id: input.userId,
+          email: input.email,
+          access_token: input.accessToken,
+          refresh_token: input.refreshToken,
+          expires_at: input.expiresAt,
+          drive_id: input.driveId,
+        },
+        { onConflict: "user_id" }
+      )
+      .select("user_id")
+      .single()
+  );
+}
+
 export async function createTaskComment(input: {
   taskId: string;
   authorId: string;
@@ -318,7 +472,7 @@ export async function listInboxItems(userId: string) {
     runQuery<DbTaskRow[]>(
       admin
         .from("tasks")
-        .select("id, title, status, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, planned_cost, created_at, updated_at")
+        .select("id, title, status, created_by, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, actual_time_minutes, timer_started_at, planned_cost, created_at, updated_at")
     ),
     runQuery<DbProjectRow[]>(
       admin
@@ -467,7 +621,7 @@ export async function listWorkspace() {
     runQuery<DbTaskRow[]>(
       admin
         .from("tasks")
-        .select("id, title, status, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, planned_cost, created_at, updated_at")
+        .select("id, title, status, created_by, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, actual_time_minutes, timer_started_at, planned_cost, created_at, updated_at")
         .order("project_id", { ascending: true })
         .order("position", { ascending: true })
     ),
@@ -536,14 +690,14 @@ export async function getTaskDetail(id: string) {
   const taskRow = await runQuery<DbTaskRow | null>(
     admin
       .from("tasks")
-      .select("id, title, status, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, planned_cost, created_at, updated_at")
+      .select("id, title, status, created_by, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, actual_time_minutes, timer_started_at, planned_cost, created_at, updated_at")
       .eq("id", id)
       .maybeSingle()
   );
 
   if (!taskRow) return null;
 
-  const [projectRow, users, taskRows, comments] = await Promise.all([
+  const [projectRow, users, taskRows, comments, documents] = await Promise.all([
     runQuery<{ id: string; name: string } | null>(
       admin
         .from("projects")
@@ -555,11 +709,12 @@ export async function getTaskDetail(id: string) {
     runQuery<DbTaskRow[]>(
       admin
         .from("tasks")
-        .select("id, title, status, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, planned_cost, created_at, updated_at")
+        .select("id, title, status, created_by, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, actual_time_minutes, timer_started_at, planned_cost, created_at, updated_at")
         .eq("project_id", taskRow.project_id)
         .order("position", { ascending: true })
     ),
     listTaskComments(id),
+    listTaskDocuments(id),
   ]);
 
   const usersById = new Map(users.map((user) => [user.id, user]));
@@ -572,6 +727,7 @@ export async function getTaskDetail(id: string) {
     ...task,
     project: projectRow ? { id: projectRow.id, name: projectRow.name } : undefined,
     comments,
+    documents,
   };
 }
 
@@ -761,6 +917,7 @@ export async function deleteProject(id: string) {
 export async function createTask(input: {
   title: string;
   projectId: string;
+  creatorId?: string | null;
   status?: string | null;
   assigneeId?: string | null;
   parentId?: string | null;
@@ -769,6 +926,8 @@ export async function createTask(input: {
   description?: string | null;
   priority?: string | null;
   effort?: number | null;
+  actualTimeMinutes?: number | null;
+  timerStartedAt?: string | null;
   plannedCost?: number | null;
   position?: number | null;
 }) {
@@ -779,6 +938,7 @@ export async function createTask(input: {
       .insert({
         title: input.title,
         project_id: input.projectId,
+        created_by: input.creatorId ?? null,
         status: input.status ?? "New",
         assignee_id: input.assigneeId ?? null,
         parent_id: input.parentId ?? null,
@@ -787,10 +947,12 @@ export async function createTask(input: {
         description: input.description ?? null,
         priority: input.priority ?? "Medium",
         effort: input.effort ?? 0,
+        actual_time_minutes: input.actualTimeMinutes ?? 0,
+        timer_started_at: input.timerStartedAt ?? null,
         planned_cost: input.plannedCost ?? 0,
         position: input.position ?? 0,
       })
-      .select("id, title, status, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, planned_cost, created_at, updated_at")
+      .select("id, title, status, created_by, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, actual_time_minutes, timer_started_at, planned_cost, created_at, updated_at")
       .single()
   ), "Unable to create task");
 
@@ -813,12 +975,14 @@ export async function updateTask(id: string, patch: Record<string, unknown>) {
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
         ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
+        ...(patch.actualTimeMinutes !== undefined ? { actual_time_minutes: patch.actualTimeMinutes } : {}),
+        ...(patch.timerStartedAt !== undefined ? { timer_started_at: patch.timerStartedAt || null } : {}),
         ...(patch.plannedCost !== undefined ? { planned_cost: patch.plannedCost } : {}),
         ...(patch.position !== undefined ? { position: patch.position } : {}),
         ...(patch.parentId !== undefined ? { parent_id: patch.parentId || null } : {}),
       })
       .eq("id", id)
-      .select("id, title, status, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, planned_cost, created_at, updated_at")
+      .select("id, title, status, created_by, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, actual_time_minutes, timer_started_at, planned_cost, created_at, updated_at")
       .single()
   ), "Unable to update task");
 

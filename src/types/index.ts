@@ -16,6 +16,23 @@ export interface TaskComment {
   mentions: User[];
 }
 
+export interface TaskDocument {
+  id: string;
+  taskId: string;
+  provider: "microsoft";
+  documentType: "word" | "excel" | "powerpoint" | "file";
+  title: string;
+  url: string;
+  createdAt: string;
+}
+
+export interface MicrosoftConnectionStatus {
+  connected: boolean;
+  configured: boolean;
+  email: string | null;
+  expiresAt: string | null;
+}
+
 export interface InboxItem {
   id: string;
   commentId: string;
@@ -34,6 +51,7 @@ export interface Task {
   id: string;
   title: string;
   status: string;
+  createdById: string | null;
   assigneeId: string | null;
   assignee: User | null;
   startDate: string | null;
@@ -45,6 +63,8 @@ export interface Task {
   position: number;
   priority: string;
   effort: number;
+  actualTimeMinutes: number;
+  timerStartedAt: string | null;
   plannedCost: number;
   createdAt: string;
   updatedAt: string;
@@ -87,5 +107,6 @@ export type ViewMode = "inbox" | "table" | "board" | "workload" | "gantt" | "das
 export interface TaskFilters {
   status: string[];
   assigneeId: string[];
+  createdById: string[];
   search: string;
 }

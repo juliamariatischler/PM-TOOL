@@ -3,7 +3,8 @@ import { requireApiSessionUser } from "@/lib/auth";
 import { createTask } from "@/lib/data";
 
 export async function POST(req: Request) {
-  if (!(await requireApiSessionUser())) {
+  const user = await requireApiSessionUser();
+  if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const body = await req.json();
@@ -16,6 +17,7 @@ export async function POST(req: Request) {
   const task = await createTask({
     title,
     projectId: body.projectId,
+    creatorId: user.id,
     status: body.status,
     assigneeId: body.assigneeId,
     parentId: body.parentId,

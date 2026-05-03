@@ -49,6 +49,7 @@ export function GanttView() {
       .filter((task) => {
         if (filters.status.length && !filters.status.includes(task.status)) return false;
         if (filters.assigneeId.length && !filters.assigneeId.includes(task.assigneeId ?? "")) return false;
+        if (filters.createdById.length && !filters.createdById.includes(task.createdById ?? "")) return false;
         if (filters.search && !task.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
         if (assigneeFilter !== "all" && task.assigneeId !== assigneeFilter) return false;
         return true;

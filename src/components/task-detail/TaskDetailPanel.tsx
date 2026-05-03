@@ -6,24 +6,31 @@ import {
   ChevronDown,
   Clock3,
   DollarSign,
+  FileSpreadsheet,
+  FileText,
   Link2,
   Loader2,
+  Plus,
   Paperclip,
   Play,
+  Presentation,
   Trash2,
   Send,
   Tag,
+  ExternalLink,
   X,
 } from "lucide-react";
 import { cn, STATUS_CONFIG, STATUSES, formatDate, getInitials } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import type { Task, TaskComment } from "@/types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { MicrosoftConnectionStatus, Task, TaskComment, TaskDocument } from "@/types";
 
 type TaskDetailTask = Task & {
   project?: { id: string; name: string };
   comments?: TaskComment[];
+  documents?: TaskDocument[];
 };
 
 export function TaskDetailPanel() {
@@ -43,6 +50,9 @@ export function TaskDetailPanel() {
   const [comment, setComment] = useState("");
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [subtaskOpen, setSubtaskOpen] = useState(false);
+  const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  const [microsoftStatus, setMicrosoftStatus] = useState<MicrosoftConnectionStatus | null>(null);
+  const [now, setNow] = useState(0);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -62,6 +72,24 @@ export function TaskDetailPanel() {
       titleRef.current?.focus();
     }
   }, [editingTitle]);
+
+  useEffect(() => {
+    if (!taskDetailOpen) return;
+
+    fetch("/api/integrations/microsoft/status")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((status) => {
+        if (status) {
+          setMicrosoftStatus(status as MicrosoftConnectionStatus);
+        }
+      });
+  }, [taskDetailOpen]);
+
+  useEffect(() => {
+    if (!task?.timerStartedAt) return;
+    const interval = window.setInterval(() => setNow(new Date().getTime()), 1000);
+    return () => window.clearInterval(interval);
+  }, [task?.timerStartedAt]);
 
   async function patchTask(patch: Partial<Task>) {
     if (!task) return;
@@ -174,6 +202,73 @@ export function TaskDetailPanel() {
     closeTask();
   }
 
+  async function addDocument(input: { title: string; url: string; documentType: TaskDocument["documentType"] }) {
+    if (!task) return;
+
+    const response = await fetch(`/api/tasks/${task.id}/documents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) return;
+
+    const created = (await response.json()) as TaskDocument;
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            documents: [created, ...(prev.documents ?? [])],
+          }
+        : prev
+    );
+    setDocumentDialogOpen(false);
+  }
+
+  async function removeDocument(documentId: string) {
+    const response = await fetch(`/api/task-documents/${documentId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) return;
+
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            documents: (prev.documents ?? []).filter((document) => document.id !== documentId),
+          }
+        : prev
+    );
+  }
+
+  function getDisplayedActualTimeMinutes(currentTask: TaskDetailTask) {
+    if (!currentTask.timerStartedAt) {
+      return currentTask.actualTimeMinutes;
+    }
+
+    const startedAt = new Date(currentTask.timerStartedAt).getTime();
+    const elapsedMinutes = Math.max(0, Math.floor((now - startedAt) / 60000));
+    return currentTask.actualTimeMinutes + elapsedMinutes;
+  }
+
+  async function toggleTimeTracking() {
+    if (!task) return;
+
+    if (task.timerStartedAt) {
+      const actualTimeMinutes = getDisplayedActualTimeMinutes(task);
+      await patchTask({
+        actualTimeMinutes,
+        timerStartedAt: null,
+      });
+      return;
+    }
+
+    await patchTask({
+      timerStartedAt: new Date().toISOString(),
+    });
+  }
+
   if (!taskDetailOpen) return null;
 
   let location = "";
@@ -191,6 +286,8 @@ export function TaskDetailPanel() {
   }
 
   const activityItems = task?.comments ?? [];
+  const displayedActualTimeMinutes = task ? getDisplayedActualTimeMinutes(task) : 0;
+  const displayedActualTime = `${Math.floor(displayedActualTimeMinutes / 60)}:${String(displayedActualTimeMinutes % 60).padStart(2, "0")}`;
 
   return (
     <>
@@ -319,25 +416,30 @@ export function TaskDetailPanel() {
                 <TaskMetaCard
                   label="Aufwand / Kosten"
                   value={
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={String(task.effort)}
-                        onChange={(event) => patchTask({ effort: Number(event.target.value || 0) })}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700 focus:outline-none"
-                      />
-                      <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-2">
-                        <DollarSign className="h-3.5 w-3.5 text-gray-400" />
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <input
                           type="number"
                           min="0"
-                          step="1"
-                          value={String(task.plannedCost)}
-                          onChange={(event) => patchTask({ plannedCost: Number(event.target.value || 0) })}
-                          className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                          step="0.5"
+                          value={String(task.effort)}
+                          onChange={(event) => patchTask({ effort: Number(event.target.value || 0) })}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700 focus:outline-none"
                         />
+                        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-2">
+                          <DollarSign className="h-3.5 w-3.5 text-gray-400" />
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={String(task.plannedCost)}
+                            onChange={(event) => patchTask({ plannedCost: Number(event.target.value || 0) })}
+                            className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Tatsaechliche Zeit: <span className="font-semibold text-gray-700">{displayedActualTime}</span>
                       </div>
                     </div>
                   }
@@ -361,11 +463,15 @@ export function TaskDetailPanel() {
                 label="Add subitem"
                 onClick={() => setSubtaskOpen((current) => !current)}
               />
-              <TaskActionChip icon={<Paperclip className="h-4 w-4" />} label="Add files" />
+              <TaskActionChip icon={<Paperclip className="h-4 w-4" />} label="Add files" onClick={() => setDocumentDialogOpen(true)} />
               <TaskActionChip icon={<CheckSquare className="h-4 w-4" />} label="Add approval" />
               <TaskActionChip icon={<Link2 className="h-4 w-4" />} label="Add dependency" />
               <span className="mx-1 h-5 w-px bg-gray-200" />
-              <TaskActionChip icon={<Play className="h-4 w-4" />} label="0:00" />
+              <TaskActionChip
+                icon={<Play className="h-4 w-4" />}
+                label={displayedActualTime}
+                onClick={toggleTimeTracking}
+              />
             </div>
 
             <div className="flex-1 overflow-y-auto px-7 py-5">
@@ -448,6 +554,75 @@ export function TaskDetailPanel() {
                 ) : null}
               </section>
 
+              <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Microsoft-Dokumente</h3>
+                    <p className="mt-1 text-xs text-gray-500">Word, Excel, PowerPoint oder OneDrive-Dateien zum Task verlinken.</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      {!microsoftStatus?.configured ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
+                          Microsoft OAuth noch nicht konfiguriert
+                        </span>
+                      ) : microsoftStatus.connected ? (
+                        <span className="rounded-full bg-green-100 px-2.5 py-1 font-medium text-green-700">
+                          Verbunden als {microsoftStatus.email ?? "Microsoft-User"}
+                        </span>
+                      ) : (
+                        <a
+                          href="/api/integrations/microsoft/connect"
+                          className="rounded-full bg-blue-100 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-200"
+                        >
+                          Mit Microsoft verbinden
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setDocumentDialogOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Dokument
+                  </Button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {(task.documents ?? []).length > 0 ? (
+                    (task.documents ?? []).map((document) => (
+                      <div key={document.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <DocumentIcon type={document.documentType} />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{document.title}</div>
+                            <div className="text-xs text-gray-500">{document.provider} · {document.documentType}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={document.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Oeffnen
+                          </a>
+                          <button
+                            onClick={() => removeDocument(document.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 hover:bg-red-100"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Entfernen
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-5 text-sm text-gray-500">
+                      Noch kein Microsoft-Dokument verknuepft.
+                    </div>
+                  )}
+                </div>
+              </section>
+
               <section className="mt-8">
                 <div className="text-center text-sm font-medium text-gray-400">This month</div>
                 <div className="mt-4 space-y-4">
@@ -506,6 +681,12 @@ export function TaskDetailPanel() {
           </>
         )}
       </div>
+
+      <AddDocumentDialog
+        open={documentDialogOpen}
+        onClose={() => setDocumentDialogOpen(false)}
+        onCreate={addDocument}
+      />
     </>
   );
 }
@@ -536,6 +717,91 @@ function TaskActionChip({
       {icon}
       <span>{label}</span>
     </button>
+  );
+}
+
+function DocumentIcon({ type }: { type: TaskDocument["documentType"] }) {
+  if (type === "excel") return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
+  if (type === "powerpoint") return <Presentation className="h-4 w-4 text-orange-500" />;
+  return <FileText className="h-4 w-4 text-blue-600" />;
+}
+
+function AddDocumentDialog({
+  open,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (input: { title: string; url: string; documentType: TaskDocument["documentType"] }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [documentType, setDocumentType] = useState<TaskDocument["documentType"]>("word");
+  const [saving, setSaving] = useState(false);
+
+  async function handleCreate() {
+    if (!title.trim() || !url.trim()) return;
+    setSaving(true);
+    try {
+      await onCreate({ title: title.trim(), url: url.trim(), documentType });
+      setTitle("");
+      setUrl("");
+      setDocumentType("word");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Microsoft-Dokument verlinken</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 px-6 pb-6">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Titel</label>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="z. B. Angebot Version 3"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Typ</label>
+            <select
+              value={documentType}
+              onChange={(event) => setDocumentType(event.target.value as TaskDocument["documentType"])}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+            >
+              <option value="word">Word</option>
+              <option value="excel">Excel</option>
+              <option value="powerpoint">PowerPoint</option>
+              <option value="file">Datei</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Microsoft-Link</label>
+            <input
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://..."
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={onClose} disabled={saving}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleCreate} disabled={saving || !title.trim() || !url.trim()}>
+              {saving ? "Speichert..." : "Verlinken"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

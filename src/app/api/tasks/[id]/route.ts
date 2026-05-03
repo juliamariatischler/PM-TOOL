@@ -28,6 +28,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.description !== undefined) data.description = body.description;
   if (body.priority !== undefined) data.priority = body.priority;
   if (body.effort !== undefined) data.effort = body.effort;
+  if (body.actualTimeMinutes !== undefined) data.actualTimeMinutes = body.actualTimeMinutes;
+  if (body.timerStartedAt !== undefined) data.timerStartedAt = body.timerStartedAt || null;
   if (body.plannedCost !== undefined) data.plannedCost = body.plannedCost;
   if (body.position !== undefined) data.position = body.position;
   if (body.parentId !== undefined) data.parentId = body.parentId || null;

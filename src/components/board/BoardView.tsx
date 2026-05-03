@@ -37,6 +37,8 @@ export function BoardView() {
     }
     return tasks.filter(t => {
       if (filters.status.length && !filters.status.includes(t.status)) return false;
+      if (filters.assigneeId.length && !filters.assigneeId.includes(t.assigneeId ?? "")) return false;
+      if (filters.createdById.length && !filters.createdById.includes(t.createdById ?? "")) return false;
       if (filters.search && !t.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
       return true;
     });

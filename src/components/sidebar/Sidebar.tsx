@@ -24,9 +24,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import type { Space, Folder as FolderType } from "@/types";
 
 export function Sidebar({
+  currentUserId,
   onCreateSpace,
   onReload,
 }: {
+  currentUserId: string;
   onCreateSpace: () => void;
   onReload: () => Promise<void>;
 }) {
@@ -40,6 +42,7 @@ export function Sidebar({
     selectProject,
     setActiveView,
     setCommandOpen,
+    setFilter,
   } = useAppStore();
   const unreadInboxCount = inboxItems.filter((item) => !item.readAt).length;
 
@@ -136,8 +139,24 @@ export function Sidebar({
               selectSpace(null);
             }}
           />
-          <NavItem icon={<CheckSquare className="h-4 w-4" />} label="My To-Do" />
-          <NavItem icon={<FileText className="h-4 w-4" />} label="Created by me" />
+          <NavItem
+            icon={<CheckSquare className="h-4 w-4" />}
+            label="My To-Do"
+            onClick={() => {
+              setActiveView("table");
+              setFilter("assigneeId", [currentUserId]);
+              setFilter("createdById", []);
+            }}
+          />
+          <NavItem
+            icon={<FileText className="h-4 w-4" />}
+            label="Created by me"
+            onClick={() => {
+              setActiveView("table");
+              setFilter("createdById", [currentUserId]);
+              setFilter("assigneeId", []);
+            }}
+          />
           <NavItem icon={<Star className="h-4 w-4" />} label="Starred" />
           <NavItem icon={<BarChart2 className="h-4 w-4" />} label="Reports" />
           <NavItem icon={<Layout className="h-4 w-4" />} label="Dashboards" />
