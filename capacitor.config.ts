@@ -6,7 +6,6 @@ const config: CapacitorConfig = {
   appId: "com.pmtool.app",
   appName: "PM Tool",
   webDir: "out",
-  bundledWebRuntime: false,
   server: serverUrl
     ? {
         url: serverUrl,

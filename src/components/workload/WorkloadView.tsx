@@ -5,7 +5,7 @@ import { cn, getInitials, STATUS_CONFIG } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { Task, User } from "@/types";
+import type { Task } from "@/types";
 
 const HOURS_PER_DAY = 8;
 
@@ -54,7 +54,11 @@ export function WorkloadView() {
   function toggleUser(id: string) {
     setExpandedUsers(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   }

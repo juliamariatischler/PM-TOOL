@@ -101,7 +101,6 @@ export function BoardView() {
 
 function KanbanColumn({ status, tasks, onOpenTask }: { status: string; tasks: Task[]; onOpenTask: (id: string) => void }) {
   const cfg = STATUS_CONFIG[status];
-  const { addTaskOptimistic, updateTaskOptimistic } = useAppStore();
 
   return (
     <div className="flex w-72 flex-shrink-0 flex-col rounded-xl border border-gray-200 bg-gray-50">

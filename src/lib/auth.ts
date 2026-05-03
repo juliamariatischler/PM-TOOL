@@ -1,91 +1,61 @@
-import crypto from "crypto";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-const SESSION_COOKIE = "pmtool_session";
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
-
-function getAuthSecret() {
-  return process.env.AUTH_SECRET || "pm-tool-dev-secret-change-me";
-}
-
-function encodeSessionPayload(payload: { userId: string; expiresAt: number }) {
-  return Buffer.from(JSON.stringify(payload)).toString("base64url");
-}
-
-function signSessionValue(value: string) {
-  return crypto.createHmac("sha256", getAuthSecret()).update(value).digest("base64url");
-}
-
-function serializeSession(payload: { userId: string; expiresAt: number }) {
-  const value = encodeSessionPayload(payload);
-  const signature = signSessionValue(value);
-  return `${value}.${signature}`;
-}
-
-function parseSessionCookie(cookieValue: string) {
-  const [value, signature] = cookieValue.split(".");
-  if (!value || !signature) return null;
-
-  const expectedSignature = signSessionValue(value);
-  if (signature.length !== expectedSignature.length) {
-    return null;
-  }
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
-      userId: string;
-      expiresAt: number;
-    };
-    if (!payload.userId || !payload.expiresAt || payload.expiresAt < Date.now()) {
-      return null;
-    }
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
-export async function createSession(userId: string) {
-  const expiresAt = Date.now() + SESSION_TTL_MS;
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, serializeSession({ userId, expiresAt }), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    expires: new Date(expiresAt),
-  });
-}
+type SessionProfile = {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string | null;
+  color: string;
+  created_at: string;
+};
 
 export async function clearSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE);
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut();
 }
 
 export async function getSessionUser() {
-  const cookieStore = await cookies();
-  const rawSession = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!rawSession) return null;
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-  const session = parseSessionCookie(rawSession);
-  if (!session) return null;
+  if (error || !user) {
+    return null;
+  }
 
-  return prisma.user.findUnique({
-    where: { id: session.userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      avatar: true,
-      color: true,
-      createdAt: true,
-    },
-  }).then((user) => user ? { ...user, createdAt: user.createdAt.toISOString() } : null);
+  const admin = getSupabaseAdminClient();
+  const { data: profile } = await admin
+    .from("users")
+    .select("id, name, email, avatar, color, created_at")
+    .eq("id", user.id)
+    .maybeSingle<SessionProfile>();
+
+  if (profile) {
+    return {
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      avatar: profile.avatar,
+      color: profile.color,
+      createdAt: profile.created_at,
+    };
+  }
+
+  return {
+    id: user.id,
+    name:
+      typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()
+        ? user.user_metadata.name
+        : user.email?.split("@")[0] ?? "User",
+    email: user.email ?? "",
+    avatar: null,
+    color: "#6366f1",
+    createdAt: user.created_at,
+  };
 }
 
 export async function requireSessionUser() {

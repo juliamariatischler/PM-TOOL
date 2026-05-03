@@ -1,10 +1,11 @@
 "use client";
 import { create } from "zustand";
-import type { Space, Task, User, ViewMode, TaskFilters } from "@/types";
+import type { InboxItem, Space, Task, User, ViewMode, TaskFilters } from "@/types";
 
 interface AppState {
   spaces: Space[];
   users: User[];
+  inboxItems: InboxItem[];
   selectedSpaceId: string | null;
   selectedProjectId: string | null;
   activeView: ViewMode;
@@ -18,13 +19,14 @@ interface AppState {
   // Actions
   setSpaces: (spaces: Space[]) => void;
   setUsers: (users: User[]) => void;
+  setInboxItems: (items: InboxItem[]) => void;
   selectSpace: (id: string | null) => void;
   selectProject: (id: string | null) => void;
   setActiveView: (view: ViewMode) => void;
   openTask: (id: string) => void;
   closeTask: () => void;
   toggleSidebar: () => void;
-  setFilter: (key: keyof TaskFilters, value: any) => void;
+  setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
   toggleTaskExpand: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
 
@@ -34,9 +36,10 @@ interface AppState {
   deleteTaskOptimistic: (taskId: string) => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
   spaces: [],
   users: [],
+  inboxItems: [],
   selectedSpaceId: null,
   selectedProjectId: null,
   activeView: "table",
@@ -49,6 +52,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSpaces: (spaces) => set({ spaces }),
   setUsers: (users) => set({ users }),
+  setInboxItems: (inboxItems) => set({ inboxItems }),
   selectSpace: (id) => set({ selectedSpaceId: id, selectedProjectId: null }),
   selectProject: (id) => set({ selectedProjectId: id }),
   setActiveView: (view) => set({ activeView: view }),
@@ -60,7 +64,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleTaskExpand: (id) =>
     set((s) => {
       const next = new Set(s.expandedTaskIds);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return { expandedTaskIds: next };
     }),
   setCommandOpen: (open) => set({ commandOpen: open }),

@@ -1,6 +1,6 @@
 # PM Tool — Full-Stack Project Management App
 
-A modern, production-ready project management application inspired by Wrike. Built with Next.js 16 App Router, Prisma 7 (SQLite), Zustand, Tailwind CSS v4, and shadcn/ui primitives.
+A modern project management application inspired by Wrike. Built with Next.js 16 App Router, Supabase, Zustand, Tailwind CSS v4, and shadcn/ui primitives.
 
 ---
 
@@ -13,9 +13,8 @@ A modern, production-ready project management application inspired by Wrike. Bui
 | State | Zustand |
 | Icons | Lucide React |
 | Drag & Drop | @dnd-kit/core + @dnd-kit/sortable |
-| Backend | Next.js API Routes |
-| ORM | Prisma 7 (driver adapter model) |
-| Database | SQLite via @libsql/client |
+| Backend | Next.js Route Handlers |
+| Auth + Database | Supabase Auth + Postgres |
 | Mobile Shell | Capacitor 8 |
 
 ---
@@ -32,14 +31,6 @@ A modern, production-ready project management application inspired by Wrike. Bui
 - **Optimistic UI** — task status and field updates reflect instantly, then sync in background
 - **Gantt / Dashboard** — stubbed with "Coming soon" placeholder
 
-### Data Model
-
-- **2 Spaces**: Manufacturing, Creative Development
-- **6 Folders** (3 per space)
-- **10 Projects**
-- **38+ Tasks** with mixed statuses, priorities, dates, and costs
-- **3 Users**: Amy W., Julia H., Jason S.
-
 ---
 
 ## Setup
@@ -55,17 +46,43 @@ A modern, production-ready project management application inspired by Wrike. Bui
 # 1. Install dependencies
 npm install
 
-# 2. Run database migration (creates dev.db)
-npm run db:migrate
+# 2. Copy env values
+cp .env.example .env.local
 
-# 3. Seed with realistic demo data
+# 3. Create the Supabase tables
+# Run supabase/schema.sql once in the Supabase SQL Editor
+
+# 4. Seed demo users + workspace data
 npm run db:seed
 
-# 4. Start the development server
+# 5. Start the development server
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Required Environment Variables
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` is server-only. Never expose it in the browser.
+
+### Supabase Setup
+
+1. Create a Supabase project.
+2. Open the SQL Editor and run [supabase/schema.sql](supabase/schema.sql).
+3. Add the three environment variables above to `.env.local` and Vercel.
+4. Run `npm run db:seed` once to create the demo users and workspace data.
+
+Demo logins created by the seed:
+
+- `juliamariatischler@gmail.com / Julia1234!`
+- `office@am-sonnenhof.at / Rafaela1234!`
+- `amy@example.com / Amy1234!`
 
 ### Available Scripts
 
@@ -79,9 +96,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `npm run cap:sync:android` | Sync only the Android shell |
 | `npm run cap:open:ios` | Open the iOS project in Xcode |
 | `npm run cap:open:android` | Open the Android project in Android Studio |
-| `npm run db:migrate` | Run Prisma migrations |
-| `npm run db:seed` | Seed the database |
-| `npm run db:reset` | Reset DB and re-seed |
+| `npm run db:seed` | Seed Supabase auth users and workspace data |
 
 ---
 
@@ -140,22 +155,24 @@ src/
 │   ├── platform/          # Runtime detection (web / iOS / Android)
 │   └── health/            # Platform-specific health integrations
 ├── lib/
-│   ├── prisma.ts          # Prisma client singleton
+│   ├── data.ts            # Supabase-backed data layer
+│   ├── auth.ts            # Supabase session helpers
 │   └── utils.ts           # cn(), STATUS_CONFIG, formatDate, etc.
 └── types/
     └── index.ts           # TypeScript interfaces
 
-prisma/
-├── schema.prisma
-├── seed.ts
-└── migrations/
+supabase/
+└── schema.sql             # Run once in Supabase SQL editor
+
+scripts/
+└── seed-supabase.mjs      # Seeds auth users and workspace data
 ```
 
 ## Mobile Notes
 
 This repo now follows a one-repo web + mobile structure with shared app code in `src/` and native shells in `ios/` and `android/`.
 
-Important: the current app uses Next.js API routes plus Prisma-backed SQLite. That means Capacitor cannot yet ship this as a simple static bundle without additional architecture work. See [docs/mobile-setup.md](docs/mobile-setup.md) for the exact constraints and workflow.
+Important: the current app uses Next.js route handlers plus Supabase. That means Capacitor cannot yet ship this as a simple static bundle without additional architecture work. See [docs/mobile-setup.md](docs/mobile-setup.md) for the exact constraints and workflow.
 
 ---
 

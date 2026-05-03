@@ -1,23 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireApiSessionUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { deleteTask, getTaskDetail, updateTask } from "@/lib/data";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireApiSessionUser())) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  const task = await prisma.task.findUnique({
-    where: { id },
-    include: {
-      assignee: true,
-      subtasks: {
-        include: { assignee: true, subtasks: true },
-        orderBy: { position: "asc" },
-      },
-      project: { include: { folder: { include: { space: true } } } },
-    },
-  });
+  const task = await getTaskDetail(id);
   if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(task);
 }
@@ -27,14 +17,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  const body = await req.json();
+  const body = (await req.json()) as Record<string, unknown>;
 
-  const data: Record<string, any> = {};
+  const data: Record<string, unknown> = {};
   if (body.title !== undefined) data.title = body.title;
   if (body.status !== undefined) data.status = body.status;
   if (body.assigneeId !== undefined) data.assigneeId = body.assigneeId || null;
-  if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
-  if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;
+  if (body.startDate !== undefined) data.startDate = body.startDate || null;
+  if (body.dueDate !== undefined) data.dueDate = body.dueDate || null;
   if (body.description !== undefined) data.description = body.description;
   if (body.priority !== undefined) data.priority = body.priority;
   if (body.effort !== undefined) data.effort = body.effort;
@@ -42,11 +32,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.position !== undefined) data.position = body.position;
   if (body.parentId !== undefined) data.parentId = body.parentId || null;
 
-  const task = await prisma.task.update({
-    where: { id },
-    data,
-    include: { assignee: true, subtasks: { include: { assignee: true } } },
-  });
+  const task = await updateTask(id, data);
   return NextResponse.json(task);
 }
 
@@ -55,6 +41,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  await prisma.task.delete({ where: { id } });
+  await deleteTask(id);
   return NextResponse.json({ ok: true });
 }

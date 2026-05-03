@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { createSession } from "@/lib/auth";
-import { verifyPassword } from "@/lib/password";
+import { getSessionUser } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -12,12 +11,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "email and password are required" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
     return NextResponse.json({ error: "invalid credentials" }, { status: 401 });
   }
 
-  await createSession(user.id);
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "unable to load user profile" }, { status: 500 });
+  }
 
   return NextResponse.json({
     id: user.id,

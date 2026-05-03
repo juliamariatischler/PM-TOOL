@@ -32,13 +32,16 @@ export function Sidebar({
 }) {
   const {
     spaces,
+    inboxItems,
     selectedProjectId,
     sidebarCollapsed,
     toggleSidebar,
     selectSpace,
     selectProject,
+    setActiveView,
     setCommandOpen,
   } = useAppStore();
+  const unreadInboxCount = inboxItems.filter((item) => !item.readAt).length;
 
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -78,8 +81,13 @@ export function Sidebar({
         <button onClick={() => setCommandOpen(true)} className="text-gray-400 hover:text-white">
           <Search className="h-4 w-4" />
         </button>
-        <button className="text-gray-400 hover:text-white">
+        <button onClick={() => setActiveView("inbox")} className="text-gray-400 hover:text-white relative">
           <Inbox className="h-4 w-4" />
+          {unreadInboxCount > 0 ? (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+              {Math.min(unreadInboxCount, 9)}
+            </span>
+          ) : null}
         </button>
         <button className="text-gray-400 hover:text-white">
           <Calendar className="h-4 w-4" />
@@ -118,7 +126,16 @@ export function Sidebar({
         </button>
 
         <nav className="mt-3 space-y-0.5 px-2">
-          <NavItem icon={<Inbox className="h-4 w-4" />} label="Inbox" badge={3} />
+          <NavItem
+            icon={<Inbox className="h-4 w-4" />}
+            label="Inbox"
+            badge={unreadInboxCount}
+            onClick={() => {
+              setActiveView("inbox");
+              selectProject(null);
+              selectSpace(null);
+            }}
+          />
           <NavItem icon={<CheckSquare className="h-4 w-4" />} label="My To-Do" />
           <NavItem icon={<FileText className="h-4 w-4" />} label="Created by me" />
           <NavItem icon={<Star className="h-4 w-4" />} label="Starred" />
@@ -146,10 +163,12 @@ export function Sidebar({
               expandedFolders={expandedFolders}
               onToggleFolder={toggleFolder}
               onSelectProject={(projectId) => {
+                setActiveView("table");
                 selectSpace(space.id);
                 selectProject(projectId);
               }}
               onSelectSpace={() => {
+                setActiveView("table");
                 selectSpace(space.id);
                 selectProject(null);
               }}
@@ -192,9 +211,9 @@ export function Sidebar({
   );
 }
 
-function NavItem({ icon, label, badge }: { icon: React.ReactNode; label: string; badge?: number }) {
+function NavItem({ icon, label, badge, onClick }: { icon: React.ReactNode; label: string; badge?: number; onClick?: () => void }) {
   return (
-    <button className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-gray-400 transition-colors hover:bg-gray-700/50 hover:text-white">
+    <button onClick={onClick} className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-gray-400 transition-colors hover:bg-gray-700/50 hover:text-white">
       {icon}
       <span>{label}</span>
       {badge ? (

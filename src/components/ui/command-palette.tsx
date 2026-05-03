@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Search, FileText, FolderOpen, Layers } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { cn } from "@/lib/utils";
 
 export function CommandPalette() {
   const { commandOpen, setCommandOpen, spaces, openTask } = useAppStore();
@@ -78,7 +77,7 @@ export function CommandPalette() {
               ))}
             </div>
           ) : query ? (
-            <div className="py-8 text-center text-sm text-gray-400">No results for "{query}"</div>
+            <div className="py-8 text-center text-sm text-gray-400">No results for &quot;{query}&quot;</div>
           ) : (
             <div className="py-4 px-4 space-y-1">
               <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Quick actions</p>

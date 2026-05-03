@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiSessionUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { createTask } from "@/lib/data";
 
 export async function POST(req: Request) {
   if (!(await requireApiSessionUser())) {
@@ -13,20 +13,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "title and projectId are required" }, { status: 400 });
   }
 
-  const task = await prisma.task.create({
-    data: {
-      title,
-      projectId: body.projectId,
-      status: body.status ?? "New",
-      assigneeId: body.assigneeId ?? null,
-      parentId: body.parentId ?? null,
-      startDate: body.startDate ? new Date(body.startDate) : null,
-      dueDate: body.dueDate ? new Date(body.dueDate) : null,
-      description: body.description ?? null,
-      priority: body.priority ?? "Medium",
-      position: body.position ?? 0,
-    },
-    include: { assignee: true, subtasks: true },
+  const task = await createTask({
+    title,
+    projectId: body.projectId,
+    status: body.status,
+    assigneeId: body.assigneeId,
+    parentId: body.parentId,
+    startDate: body.startDate,
+    dueDate: body.dueDate,
+    description: body.description,
+    priority: body.priority,
+    position: body.position,
   });
   return NextResponse.json(task, { status: 201 });
 }

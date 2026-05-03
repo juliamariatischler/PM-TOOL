@@ -17,10 +17,11 @@ import { cn, STATUS_CONFIG, STATUSES, formatDate, getInitials } from "@/lib/util
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import type { Task, User as AppUser } from "@/types";
+import type { Task, TaskComment } from "@/types";
 
 type TaskDetailTask = Task & {
   project?: { id: string; name: string };
+  comments?: TaskComment[];
 };
 
 export function TaskDetailPanel() {
@@ -123,6 +124,29 @@ export function TaskDetailPanel() {
     setSubtaskOpen(false);
   }
 
+  async function addComment() {
+    if (!task || !comment.trim()) return;
+
+    const response = await fetch(`/api/tasks/${task.id}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: comment.trim() }),
+    });
+
+    if (!response.ok) return;
+
+    const created = (await response.json()) as TaskComment;
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            comments: [...(prev.comments ?? []), created],
+          }
+        : prev
+    );
+    setComment("");
+  }
+
   if (!taskDetailOpen) return null;
 
   let location = "";
@@ -139,22 +163,7 @@ export function TaskDetailPanel() {
     }
   }
 
-  const activityItems = task
-    ? [
-        {
-          id: `${task.id}-updated`,
-          label: task.assignee?.name ?? "System",
-          timestamp: formatDate(task.updatedAt),
-          message: `Changed status to ${task.status}`,
-        },
-        {
-          id: `${task.id}-created`,
-          label: "PM Tool",
-          timestamp: formatDate(task.createdAt),
-          message: "Task created",
-        },
-      ]
-    : [];
+  const activityItems = task?.comments ?? [];
 
   return (
     <>
@@ -356,16 +365,19 @@ export function TaskDetailPanel() {
                   {activityItems.map((item) => (
                     <div key={item.id} className="flex gap-3">
                       <Avatar className="mt-1 h-9 w-9 flex-shrink-0">
-                        <AvatarFallback className="bg-[#00B050]/15 text-[11px] text-[#00B050]">
-                          {getInitials(item.label)}
+                        <AvatarFallback
+                          className="text-[11px]"
+                          style={{ backgroundColor: `${item.author.color}25`, color: item.author.color }}
+                        >
+                          {getInitials(item.author.name)}
                         </AvatarFallback>
                       </Avatar>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-800">{item.label}</span>
-                          <span className="text-xs text-gray-400">{item.timestamp}</span>
+                          <span className="text-sm font-semibold text-gray-800">{item.author.name}</span>
+                          <span className="text-xs text-gray-400">{formatDate(item.createdAt)}</span>
                         </div>
-                        <p className="mt-0.5 text-sm text-gray-500">{item.message}</p>
+                        <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-500">{item.body}</p>
                       </div>
                     </div>
                   ))}
@@ -378,9 +390,12 @@ export function TaskDetailPanel() {
                 <input
                   value={comment}
                   onChange={(event) => setComment(event.target.value)}
-                  placeholder="Add a comment..."
+                  placeholder="Add a comment... Use @julia or @rafaela"
                   className="w-full text-base text-gray-700 placeholder:text-gray-400 focus:outline-none"
                 />
+                <p className="mt-2 text-xs text-gray-400">
+                  Mentions work with simple handles like `@julia`, `@rafaela`, `@amy`.
+                </p>
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-3 text-gray-400">
                     <Paperclip className="h-4 w-4" />
@@ -390,7 +405,7 @@ export function TaskDetailPanel() {
                   <Button
                     size="sm"
                     disabled={!comment.trim()}
-                    onClick={() => setComment("")}
+                    onClick={addComment}
                     className="rounded-xl px-5"
                   >
                     <Send className="h-4 w-4" />
@@ -533,7 +548,7 @@ function AssigneeOption({
   label,
   onClick,
 }: {
-  user?: AppUser;
+  user?: { name: string; color: string };
   label?: string;
   onClick: () => void;
 }) {

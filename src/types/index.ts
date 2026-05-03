@@ -7,6 +7,29 @@ export interface User {
   createdAt: string;
 }
 
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  body: string;
+  createdAt: string;
+  author: User;
+  mentions: User[];
+}
+
+export interface InboxItem {
+  id: string;
+  commentId: string;
+  taskId: string;
+  taskTitle: string;
+  projectName: string;
+  folderName: string;
+  spaceName: string;
+  commentBody: string;
+  createdAt: string;
+  author: User;
+  readAt: string | null;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -59,7 +82,7 @@ export interface Space {
   updatedAt: string;
 }
 
-export type ViewMode = "table" | "board" | "workload" | "gantt" | "dashboard";
+export type ViewMode = "inbox" | "table" | "board" | "workload" | "gantt" | "dashboard";
 
 export interface TaskFilters {
   status: string[];

@@ -6,6 +6,7 @@ import { Toolbar } from "@/components/toolbar/Toolbar";
 import { TableView } from "@/components/table/TableView";
 import { BoardView } from "@/components/board/BoardView";
 import { WorkloadView } from "@/components/workload/WorkloadView";
+import { InboxView } from "@/components/inbox/InboxView";
 import { TaskDetailPanel } from "@/components/task-detail/TaskDetailPanel";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { MobilePlatformNotice } from "@/components/mobile/MobilePlatformNotice";
@@ -13,19 +14,21 @@ import { Loader2, FolderOpen, LogOut, Plus } from "lucide-react";
 import { CreateSpaceDialog } from "@/components/sidebar/CreateSpaceDialog";
 
 export function AppShell({ currentUser }: { currentUser: { name: string; email: string } }) {
-  const { setSpaces, setUsers, activeView, selectedSpaceId, spaces } = useAppStore();
+  const { setSpaces, setUsers, setInboxItems, activeView, selectedSpaceId, spaces } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const reload = useCallback(async () => {
-    const [spacesData, usersData] = await Promise.all([
+    const [spacesData, usersData, inboxData] = await Promise.all([
       fetch("/api/spaces").then(r => r.json()),
       fetch("/api/users").then(r => r.json()),
+      fetch("/api/inbox").then(r => r.json()),
     ]);
     setSpaces(spacesData);
     setUsers(usersData);
-  }, [setSpaces, setUsers]);
+    setInboxItems(inboxData);
+  }, [setInboxItems, setSpaces, setUsers]);
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
@@ -68,7 +71,7 @@ export function AppShell({ currentUser }: { currentUser: { name: string; email: 
           </div>
         </div>
 
-        <Toolbar />
+        {activeView !== "inbox" ? <Toolbar /> : null}
 
         {/* Main content */}
         <div className="flex-1 overflow-hidden relative">
@@ -86,6 +89,7 @@ export function AppShell({ currentUser }: { currentUser: { name: string; email: 
               {activeView === "table" && <TableView />}
               {activeView === "board" && <BoardView />}
               {activeView === "workload" && <WorkloadView />}
+              {activeView === "inbox" && <InboxView />}
               {(activeView === "gantt" || activeView === "dashboard") && <ComingSoon view={activeView} />}
             </>
           )}
