@@ -81,7 +81,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 Demo logins created by the seed:
 
 - `juliamariatischler@gmail.com / Julia1234!`
-- `office@am-sonnenhof.at / Rafaela1234!`
+- `office@am-sonnenhof.at / Rafaela1234!` (`Rafaela Kamper`)
 - `amy@example.com / Amy1234!`
 
 ### Available Scripts

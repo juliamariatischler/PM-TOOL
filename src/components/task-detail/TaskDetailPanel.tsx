@@ -5,10 +5,12 @@ import {
   CheckSquare,
   ChevronDown,
   Clock3,
+  DollarSign,
   Link2,
   Loader2,
   Paperclip,
   Play,
+  Trash2,
   Send,
   Tag,
   X,
@@ -156,6 +158,22 @@ export function TaskDetailPanel() {
     setComment("");
   }
 
+  async function deleteCurrentTask() {
+    if (!task) return;
+
+    const confirmed = window.confirm(`Task "${task.title}" wirklich loeschen?`);
+    if (!confirmed) return;
+
+    const response = await fetch(`/api/tasks/${task.id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) return;
+
+    useAppStore.getState().deleteTaskOptimistic(task.id);
+    closeTask();
+  }
+
   if (!taskDetailOpen) return null;
 
   let location = "";
@@ -236,7 +254,7 @@ export function TaskDetailPanel() {
                 </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-[1.1fr_1.1fr_1fr_auto]">
+              <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <TaskMetaCard
                   label="Status"
                   value={
@@ -256,7 +274,21 @@ export function TaskDetailPanel() {
                   }
                 />
                 <TaskMetaCard
-                  label="Date"
+                  label="Start"
+                  value={
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Calendar className="h-4 w-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={task.startDate ? task.startDate.slice(0, 10) : ""}
+                        onChange={(event) => patchTask({ startDate: event.target.value || null })}
+                        className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                      />
+                    </div>
+                  }
+                />
+                <TaskMetaCard
+                  label="Ende"
                   value={
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Calendar className="h-4 w-4 text-gray-400" />
@@ -269,8 +301,56 @@ export function TaskDetailPanel() {
                     </div>
                   }
                 />
-                <button className="flex h-full min-h-[92px] items-center justify-center rounded-xl bg-gray-100 px-4 text-gray-400 hover:text-gray-600">
-                  <ChevronDown className="h-4 w-4" />
+                <TaskMetaCard
+                  label="Prioritaet"
+                  value={
+                    <select
+                      value={task.priority}
+                      onChange={(event) => patchTask({ priority: event.target.value })}
+                      className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                    >
+                      <option value="Critical">Critical</option>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
+                  }
+                />
+                <TaskMetaCard
+                  label="Aufwand / Kosten"
+                  value={
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={String(task.effort)}
+                        onChange={(event) => patchTask({ effort: Number(event.target.value || 0) })}
+                        className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700 focus:outline-none"
+                      />
+                      <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-2">
+                        <DollarSign className="h-3.5 w-3.5 text-gray-400" />
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={String(task.plannedCost)}
+                          onChange={(event) => patchTask({ plannedCost: Number(event.target.value || 0) })}
+                          className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
+
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={deleteCurrentTask}
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Task loeschen
                 </button>
               </div>
             </div>

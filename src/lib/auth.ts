@@ -27,22 +27,26 @@ export async function getSessionUser() {
     return null;
   }
 
-  const admin = getSupabaseAdminClient();
-  const { data: profile } = await admin
-    .from("users")
-    .select("id, name, email, avatar, color, created_at")
-    .eq("id", user.id)
-    .maybeSingle<SessionProfile>();
+  try {
+    const admin = getSupabaseAdminClient();
+    const { data: profile } = await admin
+      .from("users")
+      .select("id, name, email, avatar, color, created_at")
+      .eq("id", user.id)
+      .maybeSingle<SessionProfile>();
 
-  if (profile) {
-    return {
-      id: profile.id,
-      name: profile.name,
-      email: profile.email,
-      avatar: profile.avatar,
-      color: profile.color,
-      createdAt: profile.created_at,
-    };
+    if (profile) {
+      return {
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        avatar: profile.avatar,
+        color: profile.color,
+        createdAt: profile.created_at,
+      };
+    }
+  } catch {
+    // Allow auth-only login flows to continue even if the service-role env is missing locally.
   }
 
   return {

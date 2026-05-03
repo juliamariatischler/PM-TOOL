@@ -11,6 +11,8 @@ type TimelineTask = Task & {
   location: string;
 };
 
+const HOURS_PER_DAY = 8;
+
 export function GanttView() {
   const { spaces, selectedSpaceId, selectedProjectId, filters, users, openTask } = useAppStore();
   const [monthOffset, setMonthOffset] = useState(0);
@@ -64,6 +66,30 @@ export function GanttView() {
     const withRange = timelineTasks.filter((task) => task.startDate && task.dueDate).length;
     return { total, assigned, withRange };
   }, [timelineTasks]);
+
+  const workloadByUser = users
+    .map((user) => {
+      const tasks = timelineTasks.filter((task) => task.assigneeId === user.id);
+      const totalHours = tasks.reduce((sum, task) => sum + (task.effort || 0), 0);
+      const daysPlanned = tasks.reduce((sum, task) => {
+        const start = new Date(task.startDate ?? task.dueDate ?? task.createdAt);
+        const end = new Date(task.dueDate ?? task.startDate ?? task.createdAt);
+        const visibleDays = days.filter((day) => day >= start && day <= end).length;
+        return sum + Math.max(visibleDays, 1);
+      }, 0);
+      const avgDailyLoad = daysPlanned > 0 ? totalHours / daysPlanned : 0;
+      const utilization = Math.min(999, Math.round((avgDailyLoad / HOURS_PER_DAY) * 100));
+
+      return {
+        user,
+        tasks: tasks.length,
+        totalHours,
+        avgDailyLoad,
+        utilization,
+      };
+    })
+    .filter((entry) => entry.tasks > 0)
+    .sort((a, b) => b.totalHours - a.totalHours);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[linear-gradient(180deg,#f7fbf8_0%,#ffffff_24%)]">
@@ -127,6 +153,41 @@ export function GanttView() {
           </div>
         ) : (
           <div className="min-w-[1120px]">
+            <div className="grid gap-3 border-b border-gray-200 bg-white px-4 py-4 md:grid-cols-2 xl:grid-cols-4">
+              {workloadByUser.length > 0 ? (
+                workloadByUser.map((entry) => (
+                  <div key={entry.user.id} className="rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{entry.user.name}</div>
+                        <div className="text-xs text-slate-500">{entry.tasks} geplante Tasks</div>
+                      </div>
+                      <div
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-xs font-semibold",
+                          entry.utilization > 100
+                            ? "bg-red-100 text-red-600"
+                            : entry.utilization >= 75
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-green-100 text-green-700"
+                        )}
+                      >
+                        {entry.utilization}%
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
+                      <span>{entry.totalHours.toFixed(1)}h geplant</span>
+                      <span>{entry.avgDailyLoad.toFixed(1)}h / Tag</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Noch keine Auslastung sichtbar. Weise Tasks Personen zu und pflege Zeitraum plus Aufwand.
+                </div>
+              )}
+            </div>
+
             <div
               className="grid border-b border-gray-200 bg-white/90 backdrop-blur"
               style={{ gridTemplateColumns: `320px repeat(${days.length}, minmax(42px, 1fr))` }}
@@ -175,6 +236,9 @@ export function GanttView() {
                     </span>
                     <span className="mt-1 text-xs text-slate-400">
                       {format(start, "dd.MM.yyyy")} bis {format(end, "dd.MM.yyyy")}
+                    </span>
+                    <span className="mt-1 text-xs text-slate-400">
+                      {task.effort.toFixed(1)}h geplant · {task.plannedCost > 0 ? `$${task.plannedCost.toFixed(0)}` : "kein Budget"}
                     </span>
                   </button>
 

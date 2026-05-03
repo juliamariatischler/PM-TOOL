@@ -23,7 +23,7 @@ const demoUsers = [
     color: "#10b981",
   },
   {
-    name: "Rafaela S.",
+    name: "Rafaela Kamper",
     email: "office@am-sonnenhof.at",
     password: "Rafaela1234!",
     color: "#f97316",
