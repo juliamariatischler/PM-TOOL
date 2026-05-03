@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Copy,
   Calendar,
   CheckSquare,
   ChevronDown,
@@ -12,6 +13,7 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
   Plus,
   Paperclip,
   Play,
@@ -56,6 +58,9 @@ export function TaskDetailPanel() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [description, setDescription] = useState("");
+  const [descriptionDirty, setDescriptionDirty] = useState(false);
+  const [descriptionSaving, setDescriptionSaving] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [subtaskOpen, setSubtaskOpen] = useState(false);
@@ -65,12 +70,14 @@ export function TaskDetailPanel() {
   const [microsoftStatus, setMicrosoftStatus] = useState<MicrosoftConnectionStatus | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [now, setNow] = useState(0);
-  const [topSectionHeight, setTopSectionHeight] = useState(320);
+  const [topSectionHeight, setTopSectionHeight] = useState(170);
   const [actionItemsHeight, setActionItemsHeight] = useState(180);
   const [panelWidth, setPanelWidth] = useState(880);
   const [fullWidth, setFullWidth] = useState(false);
   const [isCommentComposing, setIsCommentComposing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [copiedState, setCopiedState] = useState<"link" | "id" | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const resizeStateRef = useRef<
@@ -89,6 +96,10 @@ export function TaskDetailPanel() {
         setTask(nextTask);
         setTitleDraft(nextTask.title);
         setDescription(nextTask.description ?? "");
+        setDescriptionDirty(false);
+        setDescriptionError(null);
+        setMenuOpen(false);
+        setCopiedState(null);
       });
   }, [selectedTaskId, taskDetailOpen]);
 
@@ -132,12 +143,12 @@ export function TaskDetailPanel() {
     const textarea = descriptionRef.current;
     if (!textarea) return;
 
-    textarea.style.height = "0px";
-    const nextHeight = textarea.scrollHeight;
-    const minHeight = description.trim() ? 180 : 120;
+    const nextHeight = Math.min(520, Math.max(120, textarea.scrollHeight));
     setActionItemsHeight((current) => {
-      const clamped = Math.min(520, Math.max(minHeight, nextHeight));
-      return Math.abs(current - clamped) > 4 ? clamped : current;
+      if (current >= nextHeight) {
+        return current;
+      }
+      return nextHeight;
     });
   }, [description]);
 
@@ -148,7 +159,7 @@ export function TaskDetailPanel() {
 
       if (resizeState.mode === "height") {
         const nextHeight = resizeState.startHeight + (event.clientY - resizeState.startY);
-        setTopSectionHeight(Math.min(560, Math.max(260, nextHeight)));
+        setTopSectionHeight(Math.min(320, Math.max(140, nextHeight)));
         return;
       }
 
@@ -222,8 +233,45 @@ export function TaskDetailPanel() {
 
   async function saveDescription() {
     if (!task) return;
-    if (description === (task.description ?? "")) return;
-    await patchTask({ description });
+    if (description === (task.description ?? "")) {
+      setDescriptionDirty(false);
+      setDescriptionError(null);
+      return;
+    }
+
+    setDescriptionSaving(true);
+    setDescriptionError(null);
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description }),
+      });
+
+      if (!response.ok) {
+        let message = "Action Items konnten nicht gespeichert werden.";
+        try {
+          const payload = (await response.json()) as { error?: string };
+          if (payload.error) {
+            message = payload.error;
+          }
+        } catch {
+          // ignore json parse failures
+        }
+        setDescriptionError(message);
+        return;
+      }
+
+      const updated = (await response.json()) as TaskDetailTask;
+      setTask((prev) => (prev ? { ...prev, ...updated } : prev));
+      updateTaskOptimistic(task.id, { description: updated.description ?? "" });
+      setDescription(updated.description ?? "");
+      setDescriptionDirty(false);
+    } catch (error) {
+      setDescriptionError(error instanceof Error ? error.message : "Action Items konnten nicht gespeichert werden.");
+    } finally {
+      setDescriptionSaving(false);
+    }
   }
 
   async function reloadWorkspace() {
@@ -254,9 +302,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            subtasks: [...prev.subtasks, created],
-          }
+          ...prev,
+          subtasks: [...prev.subtasks, created],
+        }
         : prev
     );
     setSubtaskTitle("");
@@ -278,9 +326,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            comments: [...(prev.comments ?? []), created],
-          }
+          ...prev,
+          comments: [...(prev.comments ?? []), created],
+        }
         : prev
     );
     setComment("");
@@ -393,9 +441,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            documents: [created, ...(prev.documents ?? [])],
-          }
+          ...prev,
+          documents: [created, ...(prev.documents ?? [])],
+        }
         : prev
     );
     setDocumentDialogOpen(false);
@@ -411,9 +459,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            documents: (prev.documents ?? []).filter((document) => document.id !== documentId),
-          }
+          ...prev,
+          documents: (prev.documents ?? []).filter((document) => document.id !== documentId),
+        }
         : prev
     );
   }
@@ -433,9 +481,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            approvals: [created, ...(prev.approvals ?? []).filter((item) => item.id !== created.id)],
-          }
+          ...prev,
+          approvals: [created, ...(prev.approvals ?? []).filter((item) => item.id !== created.id)],
+        }
         : prev
     );
     setApprovalDialogOpen(false);
@@ -454,9 +502,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            approvals: (prev.approvals ?? []).map((approval) => (approval.id === updated.id ? updated : approval)),
-          }
+          ...prev,
+          approvals: (prev.approvals ?? []).map((approval) => (approval.id === updated.id ? updated : approval)),
+        }
         : prev
     );
   }
@@ -476,9 +524,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            links: [created, ...(prev.links ?? [])],
-          }
+          ...prev,
+          links: [created, ...(prev.links ?? [])],
+        }
         : prev
     );
     setLinkDialogOpen(false);
@@ -494,9 +542,9 @@ export function TaskDetailPanel() {
     setTask((prev) =>
       prev
         ? {
-            ...prev,
-            links: (prev.links ?? []).filter((link) => link.id !== linkId),
-          }
+          ...prev,
+          links: (prev.links ?? []).filter((link) => link.id !== linkId),
+        }
         : prev
     );
   }
@@ -563,11 +611,51 @@ export function TaskDetailPanel() {
 
   const activityItems = task?.comments ?? [];
   const displayedActualTime = task ? formatDisplayedActualTime(task) : "0:00";
+  const taskCreator =
+    task?.createdById
+      ? users.find((user) => user.id === task.createdById) ?? (currentUser?.id === task.createdById ? currentUser : null)
+      : null;
+  const approvalsSummary =
+    (task?.approvals ?? []).length > 0
+      ? `${(task?.approvals ?? []).filter((approval) => approval.status === "pending").length} offen`
+      : "Keine";
+  const dependenciesSummary =
+    (task?.links ?? []).length > 0
+      ? `${(task?.links ?? []).length} Link${(task?.links ?? []).length === 1 ? "" : "s"}`
+      : "Keine";
   const availableDependencyTasks = spaces.flatMap((space) =>
     space.folders.flatMap((folder) =>
       folder.projects.flatMap((project) => project.tasks.flatMap((candidate) => flattenTaskTree(candidate)))
     )
   ).filter((candidate) => candidate.id !== task?.id);
+
+  function getTaskPermalink(taskId: string) {
+    if (typeof window === "undefined") return `?task=${taskId}`;
+    const url = new URL(window.location.href);
+    url.searchParams.set("task", taskId);
+    return url.toString();
+  }
+
+  async function copyTaskValue(kind: "link" | "id") {
+    if (!task) return;
+    const value = kind === "link" ? getTaskPermalink(task.id) : task.id;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedState(kind);
+      window.setTimeout(() => {
+        setCopiedState((current) => (current === kind ? null : current));
+      }, 1800);
+    } catch {
+      setActionError(kind === "link" ? "Permalink konnte nicht kopiert werden." : "Task-ID konnte nicht kopiert werden.");
+    }
+  }
+
+  function openTaskInNewTab() {
+    if (!task || typeof window === "undefined") return;
+    window.open(getTaskPermalink(task.id), "_blank", "noopener,noreferrer");
+    setMenuOpen(false);
+  }
 
   function startResizing(event: React.PointerEvent<HTMLButtonElement>) {
     resizeStateRef.current = {
@@ -622,7 +710,7 @@ export function TaskDetailPanel() {
         ) : (
           <>
             <div className="border-b border-gray-100 overflow-y-auto" style={{ height: topSectionHeight }}>
-              <div className="px-7 pb-4 pt-5">
+              <div className="px-4 pb-1.5 pt-2.5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     {editingTitle ? (
@@ -664,12 +752,88 @@ export function TaskDetailPanel() {
                     >
                       {fullWidth ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                     </button>
-                    <button className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600">
+                    <button
+                      onClick={() => void copyTaskValue("link")}
+                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                    >
                       <Link2 className="h-4 w-4" />
                     </button>
-                    <button className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600">
+                    <button
+                      onClick={() => setLinkDialogOpen(true)}
+                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                    >
                       <Tag className="h-4 w-4" />
                     </button>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setMenuOpen((current) => !current)}
+                        className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                      {menuOpen ? (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                          <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] rounded-xl border border-gray-200 bg-white py-1 shadow-xl">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFullWidth((current) => !current);
+                                setMenuOpen(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              {fullWidth ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                              {fullWidth ? "Normale Breite" : "Vollbild"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={openTaskInNewTab}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              In neuem Tab oeffnen
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void copyTaskValue("link");
+                                setMenuOpen(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <Link2 className="h-4 w-4" />
+                              Permalink kopieren
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void copyTaskValue("id");
+                                setMenuOpen(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <Copy className="h-4 w-4" />
+                              Task-ID kopieren
+                            </button>
+                            {!task.deletedAt ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void deleteCurrentTask();
+                                  setMenuOpen(false);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                In Papierkorb
+                              </button>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
                     <button
                       onClick={closeTask}
                       className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
@@ -679,7 +843,7 @@ export function TaskDetailPanel() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-2 grid grid-cols-1 gap-1 md:grid-cols-2 xl:grid-cols-3">
                   <TaskMetaCard
                     label="Status"
                     value={
@@ -701,13 +865,13 @@ export function TaskDetailPanel() {
                   <TaskMetaCard
                     label="Start"
                     value={
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="h-4 w-4 text-gray-400" />
+                      <div className="flex items-center gap-1 text-[10px] leading-none text-gray-500">
+                        <Calendar className="h-3 w-3 text-gray-400" />
                         <input
                           type="date"
                           value={task.startDate ? task.startDate.slice(0, 10) : ""}
                           onChange={(event) => patchTask({ startDate: event.target.value || null })}
-                          className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                          className="h-5 w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
                         />
                       </div>
                     }
@@ -715,13 +879,13 @@ export function TaskDetailPanel() {
                   <TaskMetaCard
                     label="Ende"
                     value={
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="h-4 w-4 text-gray-400" />
+                      <div className="flex items-center gap-1 text-[10px] leading-none text-gray-500">
+                        <Calendar className="h-3 w-3 text-gray-400" />
                         <input
                           type="date"
                           value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
                           onChange={(event) => patchTask({ dueDate: event.target.value || null })}
-                          className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                          className="h-5 w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
                         />
                       </div>
                     }
@@ -732,7 +896,7 @@ export function TaskDetailPanel() {
                       <select
                         value={task.priority}
                         onChange={(event) => patchTask({ priority: event.target.value })}
-                        className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                        className="h-5 w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
                       >
                         <option value="Critical">Critical</option>
                         <option value="High">High</option>
@@ -744,33 +908,68 @@ export function TaskDetailPanel() {
                   <TaskMetaCard
                     label="Aufwand / Kosten"
                     value={
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <div className="grid grid-cols-2 gap-1">
                           <input
                             type="number"
                             min="0"
                             step="0.5"
                             value={String(task.effort)}
                             onChange={(event) => patchTask({ effort: Number(event.target.value || 0) })}
-                            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700 focus:outline-none"
+                            className="h-6 w-full rounded-md border border-gray-200 bg-white px-2 py-0 text-[10px] leading-none text-gray-700 focus:outline-none"
                           />
-                          <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-2">
-                            <DollarSign className="h-3.5 w-3.5 text-gray-400" />
+                          <div className="flex h-6 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0">
+                            <DollarSign className="h-2.5 w-2.5 text-gray-400" />
                             <input
                               type="number"
                               min="0"
                               step="1"
                               value={String(task.plannedCost)}
                               onChange={(event) => patchTask({ plannedCost: Number(event.target.value || 0) })}
-                              className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                              className="h-full w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
                             />
                           </div>
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-[9px] leading-none text-gray-500">
                           Tatsaechliche Zeit: <span className="font-semibold text-gray-700">{displayedActualTime}</span>
                         </div>
                       </div>
                     }
+                  />
+                </div>
+
+                <div className="mt-1.5 grid grid-cols-2 gap-1 xl:grid-cols-6">
+                  <CompactMetaCard
+                    label="Autor"
+                    value={taskCreator?.name ?? "Unbekannt"}
+                  />
+                  <CompactMetaCard
+                    label="Erstellt"
+                    value={formatDate(task.createdAt)}
+                  />
+                  <CompactMetaCard
+                    label="Task-ID"
+                    value={task.id.slice(0, 8)}
+                    actionLabel={copiedState === "id" ? "Kopiert" : "Kopieren"}
+                    onAction={() => void copyTaskValue("id")}
+                  />
+                  <CompactMetaCard
+                    label="Permalink"
+                    value={copiedState === "link" ? "Kopiert" : "Link"}
+                    actionLabel="Oeffnen"
+                    onAction={openTaskInNewTab}
+                  />
+                  <CompactMetaCard
+                    label="Approvals"
+                    value={approvalsSummary}
+                    actionLabel="Neu"
+                    onAction={() => setApprovalDialogOpen(true)}
+                  />
+                  <CompactMetaCard
+                    label="Dependencies"
+                    value={dependenciesSummary}
+                    actionLabel="Neu"
+                    onAction={() => setLinkDialogOpen(true)}
                   />
                 </div>
 
@@ -873,7 +1072,11 @@ export function TaskDetailPanel() {
                   <textarea
                     ref={descriptionRef}
                     value={description}
-                    onChange={(event) => setDescription(event.target.value)}
+                    onChange={(event) => {
+                      setDescription(event.target.value);
+                      setDescriptionDirty(true);
+                      setDescriptionError(null);
+                    }}
                     onKeyDown={(event) => {
                       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                         event.preventDefault();
@@ -882,15 +1085,25 @@ export function TaskDetailPanel() {
                     }}
                     placeholder="Describe the task, scope, stakeholders, and next action items..."
                     style={{ height: actionItemsHeight }}
-                    className="w-full overflow-y-auto resize-none bg-transparent text-[1.02rem] leading-8 text-gray-800 focus:outline-none"
+                    className="w-full overflow-y-auto rounded-xl border border-transparent bg-white px-3 py-3 text-[1.02rem] leading-8 text-gray-800 shadow-sm focus:border-[#00B050]/50 focus:outline-none focus:ring-2 focus:ring-[#00B050]/20"
                   />
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="text-sm text-gray-500">
+                      {descriptionError ? (
+                        <span className="text-red-600">{descriptionError}</span>
+                      ) : descriptionDirty ? (
+                        <span>Nicht gespeichert</span>
+                      ) : (
+                        <span>Gespeichert</span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => void saveDescription()}
-                      className="rounded-lg bg-[#00B050] px-3 py-2 text-sm font-medium text-white hover:bg-[#00963f]"
+                      disabled={descriptionSaving || !descriptionDirty}
+                      className="rounded-lg bg-[#00B050] px-3 py-2 text-sm font-medium text-white hover:bg-[#00963f] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Action Items speichern
+                      {descriptionSaving ? "Speichert..." : "Action Items speichern"}
                     </button>
                   </div>
                 </div>
@@ -926,11 +1139,11 @@ export function TaskDetailPanel() {
                               setTask((prev) =>
                                 prev
                                   ? {
-                                      ...prev,
-                                      subtasks: prev.subtasks.map((item) =>
-                                        item.id === subtask.id ? updated : item
-                                      ),
-                                    }
+                                    ...prev,
+                                    subtasks: prev.subtasks.map((item) =>
+                                      item.id === subtask.id ? updated : item
+                                    ),
+                                  }
                                   : prev
                               );
                               updateTaskOptimistic(subtask.id, updated);
@@ -945,110 +1158,6 @@ export function TaskDetailPanel() {
                     ))}
                   </div>
                 ) : null}
-              </section>
-
-              <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-gray-900">Approvals</h3>
-                  <p className="mt-1 text-xs text-gray-500">Zugewiesene Personen koennen den Task pruefen und freigeben.</p>
-                </div>
-
-                <div className="space-y-3">
-                  {(task.approvals ?? []).length > 0 ? (
-                    (task.approvals ?? []).map((approval) => {
-                      const canAct = currentUser?.id === approval.approver.id && approval.status === "pending";
-
-                      return (
-                        <div key={approval.id} className="rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">{approval.approver.name}</div>
-                              <div className="mt-1 text-xs text-gray-500">
-                                Status: <span className="font-semibold capitalize text-gray-700">{approval.status}</span>
-                              </div>
-                              {approval.note ? <div className="mt-1 text-xs text-gray-500">{approval.note}</div> : null}
-                            </div>
-                            {canAct ? (
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => updateApproval(approval.id, { status: "approved" })}
-                                  className="rounded-lg bg-green-100 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-200"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => updateApproval(approval.id, { status: "rejected" })}
-                                  className="rounded-lg bg-red-100 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-200"
-                                >
-                                  Reject
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-5 text-sm text-gray-500">
-                      Noch keine Freigabe angelegt.
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-gray-900">Dependencies und externe Tasks</h3>
-                  <p className="mt-1 text-xs text-gray-500">Interne Abhaengigkeiten oder externe Task-Links am Vorgang speichern.</p>
-                </div>
-
-                <div className="space-y-3">
-                  {(task.links ?? []).length > 0 ? (
-                    (task.links ?? []).map((link) => (
-                      <div key={link.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{link.title}</div>
-                          <div className="mt-1 text-xs text-gray-500">
-                            {link.linkType === "internal" ? "Interner Task" : "Externer Task"}
-                            {link.linkedTaskTitle ? ` · ${link.linkedTaskTitle}` : ""}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {link.linkType === "internal" && link.linkedTaskId ? (
-                            <button
-                              onClick={() => useAppStore.getState().openTask(link.linkedTaskId!)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
-                            >
-                              Oeffnen
-                            </button>
-                          ) : null}
-                          {link.linkType === "external" && link.url ? (
-                            <a
-                              href={link.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                              Oeffnen
-                            </a>
-                          ) : null}
-                          <button
-                            onClick={() => removeLink(link.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 hover:bg-red-100"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Entfernen
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-5 text-sm text-gray-500">
-                      Noch keine Dependencies oder externen Task-Links vorhanden.
-                    </div>
-                  )}
-                </div>
               </section>
 
               <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
@@ -1216,9 +1325,39 @@ function flattenTaskTree(task: Task): Task[] {
 
 function TaskMetaCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-[#f8fafc] px-4 py-3">
-      <div className="mb-2 text-sm font-medium text-gray-500">{label}</div>
+    <div className="rounded-lg border border-gray-200 bg-[#f8fafc] px-2 py-1.5">
+      <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] leading-none text-gray-500">{label}</div>
       {value}
+    </div>
+  );
+}
+
+function CompactMetaCard({
+  label,
+  value,
+  actionLabel,
+  onAction,
+}: {
+  label: string;
+  value: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-2 py-1.5">
+      <div className="text-[9px] font-semibold uppercase tracking-[0.08em] leading-none text-gray-500">{label}</div>
+      <div className="mt-0.5 flex items-center justify-between gap-2">
+        <span className="truncate text-[10px] font-medium leading-none text-gray-700">{value}</span>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-medium text-[#0e6d36] hover:bg-[#00B050]/10"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1523,16 +1662,16 @@ function StatusSelector({ status, onChange }: { status: string; onChange: (statu
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className={cn("flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium", config.bg, config.text)}
+        className={cn("flex h-6 items-center gap-1 rounded-md px-1.5 py-0 text-[10px] font-medium leading-none", config.bg, config.text)}
       >
-        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: config.color }} />
+        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: config.color }} />
         {config.label}
-        <ChevronDown className="h-3.5 w-3.5" />
+        <ChevronDown className="h-2.5 w-2.5" />
       </button>
       {open ? (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-2 min-w-[200px] rounded-2xl border border-gray-200 bg-white py-1 shadow-xl">
+          <div className="absolute left-0 top-full z-20 mt-1.5 min-w-[150px] rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
             {STATUSES.map((candidate) => {
               const candidateConfig = STATUS_CONFIG[candidate];
               return (
@@ -1542,9 +1681,9 @@ function StatusSelector({ status, onChange }: { status: string; onChange: (statu
                     onChange(candidate);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
                 >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: candidateConfig.color }} />
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: candidateConfig.color }} />
                   {candidateConfig.label}
                 </button>
               );
@@ -1571,20 +1710,20 @@ function AssigneeSelector({
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-[40px] w-full items-center gap-2 rounded-xl border border-transparent bg-white/70 px-1 text-left text-sm hover:text-[#00B050]"
+        className="flex min-h-[20px] w-full items-center gap-1 rounded-md border border-transparent bg-white/70 px-1 text-left text-[10px] leading-none hover:text-[#00B050]"
       >
         {assignees.length > 0 ? (
           <>
             <div className="flex -space-x-2">
               {assignees.slice(0, 3).map((assignee) => (
-                <Avatar key={assignee.id} className="h-7 w-7 border border-white">
-                  <AvatarFallback className="text-[10px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
+                <Avatar key={assignee.id} className="h-4 w-4 border border-white">
+                  <AvatarFallback className="text-[7px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
                     {getInitials(assignee.name)}
                   </AvatarFallback>
                 </Avatar>
               ))}
             </div>
-            <span className="text-gray-700">{assignees.map((assignee) => assignee.name).join(", ")}</span>
+            <span className="truncate text-gray-700">{assignees.map((assignee) => assignee.name).join(", ")}</span>
           </>
         ) : (
           <span className="text-gray-400">Empty</span>
@@ -1593,7 +1732,7 @@ function AssigneeSelector({
       {open ? (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-2 min-w-[220px] rounded-2xl border border-gray-200 bg-white py-1 shadow-xl">
+          <div className="absolute left-0 top-full z-20 mt-1.5 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
             <AssigneeOption label="Empty" onClick={() => { onChange([]); setOpen(false); }} />
             {users.map((user) => (
               <AssigneeOption
@@ -1628,11 +1767,11 @@ function AssigneeOption({
   onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} className={cn("flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50", active && "bg-green-50")}>
+    <button onClick={onClick} className={cn("flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] hover:bg-gray-50", active && "bg-green-50")}>
       {user ? (
         <>
-          <Avatar className="h-6 w-6">
-            <AvatarFallback className="text-[9px]" style={{ backgroundColor: `${user.color}30`, color: user.color }}>
+          <Avatar className="h-4.5 w-4.5">
+            <AvatarFallback className="text-[7px]" style={{ backgroundColor: `${user.color}30`, color: user.color }}>
               {getInitials(user.name)}
             </AvatarFallback>
           </Avatar>

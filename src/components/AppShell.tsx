@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { Toolbar } from "@/components/toolbar/Toolbar";
@@ -34,10 +34,11 @@ async function fetchJson<T>(input: string, fallback: T): Promise<T> {
 }
 
 export function AppShell({ currentUser }: { currentUser: { id: string; name: string; email: string } }) {
-  const { setSpaces, setUsers, setInboxItems, activeView, selectedSpaceId, spaces } = useAppStore();
+  const { setSpaces, setUsers, setInboxItems, activeView, selectedSpaceId, spaces, openTask, selectedTaskId, taskDetailOpen } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const initialTaskHandledRef = useRef(false);
 
   const reload = useCallback(async () => {
     const [spacesData, usersData, inboxData] = await Promise.all([
@@ -53,6 +54,28 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
   useEffect(() => {
     reload().finally(() => setLoading(false));
   }, [reload]);
+
+  useEffect(() => {
+    if (initialTaskHandledRef.current || typeof window === "undefined") return;
+    initialTaskHandledRef.current = true;
+
+    const taskId = new URL(window.location.href).searchParams.get("task");
+    if (taskId) {
+      openTask(taskId);
+    }
+  }, [openTask]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    if (taskDetailOpen && selectedTaskId) {
+      url.searchParams.set("task", selectedTaskId);
+    } else {
+      url.searchParams.delete("task");
+    }
+    window.history.replaceState({}, "", url);
+  }, [selectedTaskId, taskDetailOpen]);
 
   async function handleLogout() {
     setLoggingOut(true);
