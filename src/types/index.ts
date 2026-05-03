@@ -26,6 +26,28 @@ export interface TaskDocument {
   createdAt: string;
 }
 
+export interface TaskApproval {
+  id: string;
+  taskId: string;
+  approver: User;
+  requestedBy: User | null;
+  status: "pending" | "approved" | "rejected";
+  note: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export interface TaskLink {
+  id: string;
+  taskId: string;
+  linkType: "internal" | "external";
+  linkedTaskId: string | null;
+  linkedTaskTitle: string | null;
+  title: string;
+  url: string | null;
+  createdAt: string;
+}
+
 export interface MicrosoftConnectionStatus {
   connected: boolean;
   configured: boolean;

@@ -96,6 +96,29 @@ create table if not exists public.task_documents (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.task_approvals (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  approver_user_id uuid not null references public.users(id) on delete cascade,
+  requested_by_user_id uuid references public.users(id) on delete set null,
+  status text not null default 'pending',
+  note text,
+  decided_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  unique (task_id, approver_user_id)
+);
+
+create table if not exists public.task_links (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  link_type text not null default 'internal',
+  linked_task_id uuid references public.tasks(id) on delete cascade,
+  title text not null,
+  url text,
+  created_by uuid references public.users(id) on delete set null,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.microsoft_connections (
   user_id uuid primary key references public.users(id) on delete cascade,
   email text,
@@ -116,6 +139,10 @@ create index if not exists task_comments_task_id_idx on public.task_comments(tas
 create index if not exists task_comment_mentions_user_id_idx on public.task_comment_mentions(mentioned_user_id);
 create index if not exists task_comment_mentions_comment_id_idx on public.task_comment_mentions(comment_id);
 create index if not exists task_documents_task_id_idx on public.task_documents(task_id);
+create index if not exists task_approvals_task_id_idx on public.task_approvals(task_id);
+create index if not exists task_approvals_approver_user_id_idx on public.task_approvals(approver_user_id);
+create index if not exists task_links_task_id_idx on public.task_links(task_id);
+create index if not exists task_links_linked_task_id_idx on public.task_links(linked_task_id);
 
 drop trigger if exists spaces_set_updated_at on public.spaces;
 create trigger spaces_set_updated_at
@@ -155,6 +182,8 @@ alter table public.tasks enable row level security;
 alter table public.task_comments enable row level security;
 alter table public.task_comment_mentions enable row level security;
 alter table public.task_documents enable row level security;
+alter table public.task_approvals enable row level security;
+alter table public.task_links enable row level security;
 alter table public.microsoft_connections enable row level security;
 
 drop policy if exists "users can read own profile" on public.users;
@@ -279,6 +308,36 @@ using (true);
 drop policy if exists "authenticated can write task documents" on public.task_documents;
 create policy "authenticated can write task documents"
 on public.task_documents
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "authenticated can read task approvals" on public.task_approvals;
+create policy "authenticated can read task approvals"
+on public.task_approvals
+for select
+to authenticated
+using (true);
+
+drop policy if exists "authenticated can write task approvals" on public.task_approvals;
+create policy "authenticated can write task approvals"
+on public.task_approvals
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "authenticated can read task links" on public.task_links;
+create policy "authenticated can read task links"
+on public.task_links
+for select
+to authenticated
+using (true);
+
+drop policy if exists "authenticated can write task links" on public.task_links;
+create policy "authenticated can write task links"
+on public.task_links
 for all
 to authenticated
 using (true)

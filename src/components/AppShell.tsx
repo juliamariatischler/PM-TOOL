@@ -14,6 +14,25 @@ import { MobilePlatformNotice } from "@/components/mobile/MobilePlatformNotice";
 import { Loader2, FolderOpen, LogOut, Plus } from "lucide-react";
 import { CreateSpaceDialog } from "@/components/sidebar/CreateSpaceDialog";
 
+async function fetchJson<T>(input: string, fallback: T): Promise<T> {
+  try {
+    const response = await fetch(input);
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!response.ok) {
+      return fallback;
+    }
+
+    if (!contentType.includes("application/json")) {
+      return fallback;
+    }
+
+    return (await response.json()) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export function AppShell({ currentUser }: { currentUser: { id: string; name: string; email: string } }) {
   const { setSpaces, setUsers, setInboxItems, activeView, selectedSpaceId, spaces } = useAppStore();
   const [loading, setLoading] = useState(true);
@@ -22,9 +41,9 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
 
   const reload = useCallback(async () => {
     const [spacesData, usersData, inboxData] = await Promise.all([
-      fetch("/api/spaces").then(r => r.json()),
-      fetch("/api/users").then(r => r.json()),
-      fetch("/api/inbox").then(r => r.json()),
+      fetchJson("/api/spaces", []),
+      fetchJson("/api/users", []),
+      fetchJson("/api/inbox", []),
     ]);
     setSpaces(spacesData);
     setUsers(usersData);

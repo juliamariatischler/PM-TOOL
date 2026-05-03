@@ -10,6 +10,8 @@ import {
   FileText,
   Link2,
   Loader2,
+  Maximize2,
+  Minimize2,
   Plus,
   Paperclip,
   Play,
@@ -25,12 +27,14 @@ import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { MicrosoftConnectionStatus, Task, TaskComment, TaskDocument } from "@/types";
+import type { MicrosoftConnectionStatus, Task, TaskApproval, TaskComment, TaskDocument, TaskLink, User } from "@/types";
 
 type TaskDetailTask = Task & {
   project?: { id: string; name: string };
   comments?: TaskComment[];
   documents?: TaskDocument[];
+  approvals?: TaskApproval[];
+  links?: TaskLink[];
 };
 
 export function TaskDetailPanel() {
@@ -51,9 +55,24 @@ export function TaskDetailPanel() {
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [subtaskOpen, setSubtaskOpen] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [microsoftStatus, setMicrosoftStatus] = useState<MicrosoftConnectionStatus | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [now, setNow] = useState(0);
+  const [topSectionHeight, setTopSectionHeight] = useState(320);
+  const [actionItemsHeight, setActionItemsHeight] = useState(180);
+  const [panelWidth, setPanelWidth] = useState(880);
+  const [fullWidth, setFullWidth] = useState(false);
+  const [isCommentComposing, setIsCommentComposing] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const resizeStateRef = useRef<
+    | { mode: "height"; startY: number; startHeight: number }
+    | { mode: "width"; startX: number; startWidth: number }
+    | { mode: "action-items"; startY: number; startHeight: number }
+    | null
+  >(null);
 
   useEffect(() => {
     if (!selectedTaskId || !taskDetailOpen) return;
@@ -86,10 +105,71 @@ export function TaskDetailPanel() {
   }, [taskDetailOpen]);
 
   useEffect(() => {
+    if (!taskDetailOpen) return;
+
+    fetch("/api/auth/me")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((user) => {
+        if (user) {
+          setCurrentUser(user as User);
+        }
+      });
+  }, [taskDetailOpen]);
+
+  useEffect(() => {
     if (!task?.timerStartedAt) return;
     const interval = window.setInterval(() => setNow(new Date().getTime()), 1000);
     return () => window.clearInterval(interval);
   }, [task?.timerStartedAt]);
+
+  useEffect(() => {
+    const textarea = descriptionRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    const nextHeight = textarea.scrollHeight;
+    const minHeight = description.trim() ? 180 : 120;
+    setActionItemsHeight((current) => {
+      const clamped = Math.min(520, Math.max(minHeight, nextHeight));
+      return Math.abs(current - clamped) > 4 ? clamped : current;
+    });
+  }, [description]);
+
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState) return;
+
+      if (resizeState.mode === "height") {
+        const nextHeight = resizeState.startHeight + (event.clientY - resizeState.startY);
+        setTopSectionHeight(Math.min(560, Math.max(260, nextHeight)));
+        return;
+      }
+
+      if (resizeState.mode === "action-items") {
+        const nextHeight = resizeState.startHeight + (event.clientY - resizeState.startY);
+        setActionItemsHeight(Math.min(520, Math.max(120, nextHeight)));
+        return;
+      }
+
+      const nextWidth = resizeState.startWidth - (event.clientX - resizeState.startX);
+      setPanelWidth(Math.min(window.innerWidth, Math.max(720, nextWidth)));
+    }
+
+    function handlePointerUp() {
+      resizeStateRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, []);
 
   async function patchTask(patch: Partial<Task>) {
     if (!task) return;
@@ -186,6 +266,11 @@ export function TaskDetailPanel() {
     setComment("");
   }
 
+  async function submitCommentFromKeyboard() {
+    if (!comment.trim()) return;
+    await addComment();
+  }
+
   async function deleteCurrentTask() {
     if (!task) return;
 
@@ -242,6 +327,89 @@ export function TaskDetailPanel() {
     );
   }
 
+  async function addApproval(input: { approverUserId: string; note?: string }) {
+    if (!task) return;
+
+    const response = await fetch(`/api/tasks/${task.id}/approvals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) return;
+
+    const created = (await response.json()) as TaskApproval;
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            approvals: [created, ...(prev.approvals ?? []).filter((item) => item.id !== created.id)],
+          }
+        : prev
+    );
+    setApprovalDialogOpen(false);
+  }
+
+  async function updateApproval(approvalId: string, patch: { status?: "pending" | "approved" | "rejected"; note?: string | null }) {
+    const response = await fetch(`/api/task-approvals/${approvalId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+
+    if (!response.ok) return;
+
+    const updated = (await response.json()) as TaskApproval;
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            approvals: (prev.approvals ?? []).map((approval) => (approval.id === updated.id ? updated : approval)),
+          }
+        : prev
+    );
+  }
+
+  async function addLink(input: { linkType: "internal" | "external"; linkedTaskId?: string; title: string; url?: string }) {
+    if (!task) return;
+
+    const response = await fetch(`/api/tasks/${task.id}/links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) return;
+
+    const created = (await response.json()) as TaskLink;
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            links: [created, ...(prev.links ?? [])],
+          }
+        : prev
+    );
+    setLinkDialogOpen(false);
+  }
+
+  async function removeLink(linkId: string) {
+    const response = await fetch(`/api/task-links/${linkId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) return;
+
+    setTask((prev) =>
+      prev
+        ? {
+            ...prev,
+            links: (prev.links ?? []).filter((link) => link.id !== linkId),
+          }
+        : prev
+    );
+  }
+
   function getDisplayedActualTimeMinutes(currentTask: TaskDetailTask) {
     if (!currentTask.timerStartedAt) {
       return currentTask.actualTimeMinutes;
@@ -250,6 +418,23 @@ export function TaskDetailPanel() {
     const startedAt = new Date(currentTask.timerStartedAt).getTime();
     const elapsedMinutes = Math.max(0, Math.floor((now - startedAt) / 60000));
     return currentTask.actualTimeMinutes + elapsedMinutes;
+  }
+
+  function formatDisplayedActualTime(currentTask: TaskDetailTask) {
+    const baseSeconds = currentTask.actualTimeMinutes * 60;
+    const runningSeconds = currentTask.timerStartedAt
+      ? Math.max(0, Math.floor((now - new Date(currentTask.timerStartedAt).getTime()) / 1000))
+      : 0;
+    const totalSeconds = baseSeconds + runningSeconds;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (currentTask.timerStartedAt) {
+      return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    return `${hours}:${String(minutes).padStart(2, "0")}`;
   }
 
   async function toggleTimeTracking() {
@@ -286,192 +471,255 @@ export function TaskDetailPanel() {
   }
 
   const activityItems = task?.comments ?? [];
-  const displayedActualTimeMinutes = task ? getDisplayedActualTimeMinutes(task) : 0;
-  const displayedActualTime = `${Math.floor(displayedActualTimeMinutes / 60)}:${String(displayedActualTimeMinutes % 60).padStart(2, "0")}`;
+  const displayedActualTime = task ? formatDisplayedActualTime(task) : "0:00";
+  const availableDependencyTasks = spaces.flatMap((space) =>
+    space.folders.flatMap((folder) =>
+      folder.projects.flatMap((project) => project.tasks.flatMap((candidate) => flattenTaskTree(candidate)))
+    )
+  ).filter((candidate) => candidate.id !== task?.id);
+
+  function startResizing(event: React.PointerEvent<HTMLButtonElement>) {
+    resizeStateRef.current = {
+      mode: "height",
+      startY: event.clientY,
+      startHeight: topSectionHeight,
+    };
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function startWidthResizing(event: React.PointerEvent<HTMLButtonElement>) {
+    setFullWidth(false);
+    resizeStateRef.current = {
+      mode: "width",
+      startX: event.clientX,
+      startWidth: panelWidth,
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function startActionItemsResizing(event: React.PointerEvent<HTMLButtonElement>) {
+    resizeStateRef.current = {
+      mode: "action-items",
+      startY: event.clientY,
+      startHeight: actionItemsHeight,
+    };
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }
 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20" onClick={closeTask} />
 
-      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[880px] flex-col border-l border-gray-200 bg-white shadow-2xl">
+      <div
+        className="fixed right-0 top-0 z-50 flex h-full flex-col border-l border-gray-200 bg-white shadow-2xl"
+        style={{ width: fullWidth ? "100vw" : `${panelWidth}px`, maxWidth: "100vw" }}
+      >
+        <button
+          type="button"
+          aria-label="Panelbreite anpassen"
+          onPointerDown={startWidthResizing}
+          className="absolute left-0 top-0 z-10 h-full w-3 -translate-x-1/2 cursor-col-resize"
+        />
         {!task ? (
           <div className="flex flex-1 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-[#00B050]" />
           </div>
         ) : (
           <>
-            <div className="border-b border-gray-100 px-7 pb-5 pt-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  {editingTitle ? (
-                    <input
-                      ref={titleRef}
-                      value={titleDraft}
-                      onChange={(event) => setTitleDraft(event.target.value)}
-                      onBlur={saveTitle}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          saveTitle();
-                        }
-                      }}
-                      className="w-full border-b-2 border-[#00B050] bg-transparent text-[2rem] font-semibold leading-tight text-gray-900 focus:outline-none"
-                    />
-                  ) : (
-                    <h2
-                      onClick={() => setEditingTitle(true)}
-                      className="cursor-text truncate text-[2rem] font-semibold leading-tight text-gray-900"
-                    >
-                      {task.title}
-                    </h2>
-                  )}
+            <div className="border-b border-gray-100 overflow-y-auto" style={{ height: topSectionHeight }}>
+              <div className="px-7 pb-4 pt-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    {editingTitle ? (
+                      <input
+                        ref={titleRef}
+                        value={titleDraft}
+                        onChange={(event) => setTitleDraft(event.target.value)}
+                        onBlur={saveTitle}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            saveTitle();
+                          }
+                        }}
+                        className="w-full border-b-2 border-[#00B050] bg-transparent text-[1.75rem] font-semibold leading-tight text-gray-900 focus:outline-none"
+                      />
+                    ) : (
+                      <h2
+                        onClick={() => setEditingTitle(true)}
+                        className="cursor-text truncate text-[1.75rem] font-semibold leading-tight text-gray-900"
+                      >
+                        {task.title}
+                      </h2>
+                    )}
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-sm text-gray-600">
-                      {location || "No project context"}
-                    </span>
-                    <span className="inline-flex items-center rounded-full bg-[#00B050] px-3 py-1 text-sm font-semibold text-white">
-                      {task.subtasks.length}
-                    </span>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-sm text-gray-600">
+                        {location || "No project context"}
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-[#00B050] px-3 py-1 text-sm font-semibold text-white">
+                        {task.subtasks.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <button
+                      onClick={() => setFullWidth((current) => !current)}
+                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                    >
+                      {fullWidth ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                    </button>
+                    <button className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600">
+                      <Link2 className="h-4 w-4" />
+                    </button>
+                    <button className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600">
+                      <Tag className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={closeTask}
+                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-gray-400">
-                  <button className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600">
-                    <Link2 className="h-4 w-4" />
-                  </button>
-                  <button className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600">
-                    <Tag className="h-4 w-4" />
-                  </button>
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <TaskMetaCard
+                    label="Status"
+                    value={
+                      <StatusSelector
+                        status={task.status}
+                        onChange={(status) => patchTask({ status })}
+                      />
+                    }
+                  />
+                  <TaskMetaCard
+                    label="Assignee"
+                    value={
+                      <AssigneeSelector
+                        assigneeId={task.assigneeId}
+                        onChange={(assigneeId) => patchTask({ assigneeId })}
+                      />
+                    }
+                  />
+                  <TaskMetaCard
+                    label="Start"
+                    value={
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <input
+                          type="date"
+                          value={task.startDate ? task.startDate.slice(0, 10) : ""}
+                          onChange={(event) => patchTask({ startDate: event.target.value || null })}
+                          className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                        />
+                      </div>
+                    }
+                  />
+                  <TaskMetaCard
+                    label="Ende"
+                    value={
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <input
+                          type="date"
+                          value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
+                          onChange={(event) => patchTask({ dueDate: event.target.value || null })}
+                          className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                        />
+                      </div>
+                    }
+                  />
+                  <TaskMetaCard
+                    label="Prioritaet"
+                    value={
+                      <select
+                        value={task.priority}
+                        onChange={(event) => patchTask({ priority: event.target.value })}
+                        className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                      >
+                        <option value="Critical">Critical</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    }
+                  />
+                  <TaskMetaCard
+                    label="Aufwand / Kosten"
+                    value={
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={String(task.effort)}
+                            onChange={(event) => patchTask({ effort: Number(event.target.value || 0) })}
+                            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700 focus:outline-none"
+                          />
+                          <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-2">
+                            <DollarSign className="h-3.5 w-3.5 text-gray-400" />
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={String(task.plannedCost)}
+                              onChange={(event) => patchTask({ plannedCost: Number(event.target.value || 0) })}
+                              className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Tatsaechliche Zeit: <span className="font-semibold text-gray-700">{displayedActualTime}</span>
+                        </div>
+                      </div>
+                    }
+                  />
+                </div>
+
+                <div className="mt-3 flex justify-end">
                   <button
-                    onClick={closeTask}
-                    className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                    onClick={deleteCurrentTask}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
                   >
-                    <X className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" />
+                    Task loeschen
                   </button>
                 </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-                <TaskMetaCard
-                  label="Status"
-                  value={
-                    <StatusSelector
-                      status={task.status}
-                      onChange={(status) => patchTask({ status })}
-                    />
-                  }
+              <div className="flex items-center gap-2 border-t border-gray-100 px-7 py-3 text-sm text-gray-500">
+                <TaskActionChip
+                  icon={<CheckSquare className="h-4 w-4" />}
+                  label="Add subitem"
+                  onClick={() => setSubtaskOpen((current) => !current)}
                 />
-                <TaskMetaCard
-                  label="Assignee"
-                  value={
-                    <AssigneeSelector
-                      assigneeId={task.assigneeId}
-                      onChange={(assigneeId) => patchTask({ assigneeId })}
-                    />
-                  }
+                <TaskActionChip icon={<Paperclip className="h-4 w-4" />} label="Add files" onClick={() => setDocumentDialogOpen(true)} />
+                <TaskActionChip icon={<CheckSquare className="h-4 w-4" />} label="Add approval" onClick={() => setApprovalDialogOpen(true)} />
+                <TaskActionChip icon={<Link2 className="h-4 w-4" />} label="Add dependency" onClick={() => setLinkDialogOpen(true)} />
+                <span className="mx-1 h-5 w-px bg-gray-200" />
+                <TaskActionChip
+                  icon={<Play className="h-4 w-4" />}
+                  label={displayedActualTime}
+                  onClick={toggleTimeTracking}
                 />
-                <TaskMetaCard
-                  label="Start"
-                  value={
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <input
-                        type="date"
-                        value={task.startDate ? task.startDate.slice(0, 10) : ""}
-                        onChange={(event) => patchTask({ startDate: event.target.value || null })}
-                        className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
-                      />
-                    </div>
-                  }
-                />
-                <TaskMetaCard
-                  label="Ende"
-                  value={
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <input
-                        type="date"
-                        value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
-                        onChange={(event) => patchTask({ dueDate: event.target.value || null })}
-                        className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
-                      />
-                    </div>
-                  }
-                />
-                <TaskMetaCard
-                  label="Prioritaet"
-                  value={
-                    <select
-                      value={task.priority}
-                      onChange={(event) => patchTask({ priority: event.target.value })}
-                      className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
-                    >
-                      <option value="Critical">Critical</option>
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                  }
-                />
-                <TaskMetaCard
-                  label="Aufwand / Kosten"
-                  value={
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={String(task.effort)}
-                          onChange={(event) => patchTask({ effort: Number(event.target.value || 0) })}
-                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700 focus:outline-none"
-                        />
-                        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-2">
-                          <DollarSign className="h-3.5 w-3.5 text-gray-400" />
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={String(task.plannedCost)}
-                            onChange={(event) => patchTask({ plannedCost: Number(event.target.value || 0) })}
-                            className="w-full bg-transparent text-sm text-gray-700 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Tatsaechliche Zeit: <span className="font-semibold text-gray-700">{displayedActualTime}</span>
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-
-              <div className="mt-3 flex justify-end">
-                <button
-                  onClick={deleteCurrentTask}
-                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Task loeschen
-                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 border-b border-gray-100 px-7 py-3 text-sm text-gray-500">
-              <TaskActionChip
-                icon={<CheckSquare className="h-4 w-4" />}
-                label="Add subitem"
-                onClick={() => setSubtaskOpen((current) => !current)}
-              />
-              <TaskActionChip icon={<Paperclip className="h-4 w-4" />} label="Add files" onClick={() => setDocumentDialogOpen(true)} />
-              <TaskActionChip icon={<CheckSquare className="h-4 w-4" />} label="Add approval" />
-              <TaskActionChip icon={<Link2 className="h-4 w-4" />} label="Add dependency" />
-              <span className="mx-1 h-5 w-px bg-gray-200" />
-              <TaskActionChip
-                icon={<Play className="h-4 w-4" />}
-                label={displayedActualTime}
-                onClick={toggleTimeTracking}
-              />
+            <div className="border-b border-gray-100 px-7 py-2">
+              <button
+                type="button"
+                aria-label="Bereichsgroesse anpassen"
+                onPointerDown={startResizing}
+                className="group flex w-full cursor-row-resize items-center justify-center"
+              >
+                <span className="h-1.5 w-16 rounded-full bg-gray-200 transition-colors group-hover:bg-gray-300" />
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-7 py-5">
@@ -505,13 +753,25 @@ export function TaskDetailPanel() {
                 <label className="mb-2 block text-sm font-semibold text-gray-600">Action Items:</label>
 
                 <textarea
+                  ref={descriptionRef}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   onBlur={saveDescription}
                   placeholder="Describe the task, scope, stakeholders, and next action items..."
-                  rows={10}
-                  className="w-full resize-none bg-transparent text-[1.02rem] leading-8 text-gray-800 focus:outline-none"
+                  style={{ height: actionItemsHeight }}
+                  className="w-full overflow-y-auto resize-none bg-transparent text-[1.02rem] leading-8 text-gray-800 focus:outline-none"
                 />
+
+                <div className="mt-2 flex justify-center">
+                  <button
+                    type="button"
+                    aria-label="Action-Items-Hoehe anpassen"
+                    onPointerDown={startActionItemsResizing}
+                    className="group flex w-full cursor-row-resize items-center justify-center py-1"
+                  >
+                    <span className="h-1.5 w-14 rounded-full bg-gray-200 transition-colors group-hover:bg-gray-300" />
+                  </button>
+                </div>
 
                 {task.subtasks.length > 0 ? (
                   <div className="mt-3 space-y-2 border-t border-gray-100 pt-4">
@@ -552,6 +812,110 @@ export function TaskDetailPanel() {
                     ))}
                   </div>
                 ) : null}
+              </section>
+
+              <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold text-gray-900">Approvals</h3>
+                  <p className="mt-1 text-xs text-gray-500">Zugewiesene Personen koennen den Task pruefen und freigeben.</p>
+                </div>
+
+                <div className="space-y-3">
+                  {(task.approvals ?? []).length > 0 ? (
+                    (task.approvals ?? []).map((approval) => {
+                      const canAct = currentUser?.id === approval.approver.id && approval.status === "pending";
+
+                      return (
+                        <div key={approval.id} className="rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{approval.approver.name}</div>
+                              <div className="mt-1 text-xs text-gray-500">
+                                Status: <span className="font-semibold capitalize text-gray-700">{approval.status}</span>
+                              </div>
+                              {approval.note ? <div className="mt-1 text-xs text-gray-500">{approval.note}</div> : null}
+                            </div>
+                            {canAct ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => updateApproval(approval.id, { status: "approved" })}
+                                  className="rounded-lg bg-green-100 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-200"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => updateApproval(approval.id, { status: "rejected" })}
+                                  className="rounded-lg bg-red-100 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-200"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-5 text-sm text-gray-500">
+                      Noch keine Freigabe angelegt.
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold text-gray-900">Dependencies und externe Tasks</h3>
+                  <p className="mt-1 text-xs text-gray-500">Interne Abhaengigkeiten oder externe Task-Links am Vorgang speichern.</p>
+                </div>
+
+                <div className="space-y-3">
+                  {(task.links ?? []).length > 0 ? (
+                    (task.links ?? []).map((link) => (
+                      <div key={link.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{link.title}</div>
+                          <div className="mt-1 text-xs text-gray-500">
+                            {link.linkType === "internal" ? "Interner Task" : "Externer Task"}
+                            {link.linkedTaskTitle ? ` · ${link.linkedTaskTitle}` : ""}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {link.linkType === "internal" && link.linkedTaskId ? (
+                            <button
+                              onClick={() => useAppStore.getState().openTask(link.linkedTaskId!)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                            >
+                              Oeffnen
+                            </button>
+                          ) : null}
+                          {link.linkType === "external" && link.url ? (
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Oeffnen
+                            </a>
+                          ) : null}
+                          <button
+                            onClick={() => removeLink(link.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 hover:bg-red-100"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Entfernen
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-5 text-sm text-gray-500">
+                      Noch keine Dependencies oder externen Task-Links vorhanden.
+                    </div>
+                  )}
+                </div>
               </section>
 
               <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
@@ -651,11 +1015,21 @@ export function TaskDetailPanel() {
 
             <div className="border-t border-gray-100 px-7 py-5">
               <div className="rounded-2xl border-2 border-[#00B050] bg-white px-4 py-3">
-                <input
+                <textarea
                   value={comment}
                   onChange={(event) => setComment(event.target.value)}
+                  onCompositionStart={() => setIsCommentComposing(true)}
+                  onCompositionEnd={() => setIsCommentComposing(false)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.shiftKey || isCommentComposing) {
+                      return;
+                    }
+                    event.preventDefault();
+                    void submitCommentFromKeyboard();
+                  }}
                   placeholder="Add a comment... Use @julia or @rafaela"
-                  className="w-full text-base text-gray-700 placeholder:text-gray-400 focus:outline-none"
+                  rows={comment.trim() ? 3 : 1}
+                  className="w-full resize-none bg-transparent text-base text-gray-700 placeholder:text-gray-400 focus:outline-none"
                 />
                 <p className="mt-2 text-xs text-gray-400">
                   Mentions work with simple handles like `@julia`, `@rafaela`, `@amy`.
@@ -687,8 +1061,24 @@ export function TaskDetailPanel() {
         onClose={() => setDocumentDialogOpen(false)}
         onCreate={addDocument}
       />
+      <AddApprovalDialog
+        open={approvalDialogOpen}
+        onClose={() => setApprovalDialogOpen(false)}
+        onCreate={addApproval}
+        users={users}
+      />
+      <AddLinkDialog
+        open={linkDialogOpen}
+        onClose={() => setLinkDialogOpen(false)}
+        onCreate={addLink}
+        tasks={availableDependencyTasks}
+      />
     </>
   );
+}
+
+function flattenTaskTree(task: Task): Task[] {
+  return [task, ...task.subtasks.flatMap((subtask) => flattenTaskTree(subtask))];
 }
 
 function TaskMetaCard({ label, value }: { label: string; value: React.ReactNode }) {
@@ -797,6 +1187,193 @@ function AddDocumentDialog({
             </Button>
             <Button onClick={handleCreate} disabled={saving || !title.trim() || !url.trim()}>
               {saving ? "Speichert..." : "Verlinken"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddApprovalDialog({
+  open,
+  onClose,
+  onCreate,
+  users,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (input: { approverUserId: string; note?: string }) => Promise<void>;
+  users: User[];
+}) {
+  const [approverUserId, setApproverUserId] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleCreate() {
+    if (!approverUserId) return;
+    setSaving(true);
+    try {
+      await onCreate({ approverUserId, note: note.trim() || undefined });
+      setApproverUserId("");
+      setNote("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Approval anfragen</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 px-6 pb-6">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Person</label>
+            <select
+              value={approverUserId}
+              onChange={(event) => setApproverUserId(event.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+            >
+              <option value="">Bitte waehlen</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Notiz</label>
+            <textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              rows={3}
+              placeholder="Optional: was genau geprueft werden soll"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={onClose} disabled={saving}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleCreate} disabled={saving || !approverUserId}>
+              {saving ? "Speichert..." : "Approval anlegen"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddLinkDialog({
+  open,
+  onClose,
+  onCreate,
+  tasks,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (input: { linkType: "internal" | "external"; linkedTaskId?: string; title: string; url?: string }) => Promise<void>;
+  tasks: Task[];
+}) {
+  const [linkType, setLinkType] = useState<"internal" | "external">("internal");
+  const [linkedTaskId, setLinkedTaskId] = useState("");
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleCreate() {
+    if (!title.trim()) return;
+    if (linkType === "internal" && !linkedTaskId) return;
+    if (linkType === "external" && !url.trim()) return;
+
+    setSaving(true);
+    try {
+      await onCreate({
+        linkType,
+        linkedTaskId: linkType === "internal" ? linkedTaskId : undefined,
+        title: title.trim(),
+        url: linkType === "external" ? url.trim() : undefined,
+      });
+      setLinkedTaskId("");
+      setTitle("");
+      setUrl("");
+      setLinkType("internal");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Dependency oder externer Task</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 px-6 pb-6">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Typ</label>
+            <select
+              value={linkType}
+              onChange={(event) => setLinkType(event.target.value as "internal" | "external")}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+            >
+              <option value="internal">Interner Task</option>
+              <option value="external">Externer Task</option>
+            </select>
+          </div>
+          {linkType === "internal" ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Task</label>
+              <select
+                value={linkedTaskId}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  setLinkedTaskId(nextId);
+                  const selectedTask = tasks.find((task) => task.id === nextId);
+                  if (selectedTask) {
+                    setTitle(selectedTask.title);
+                  }
+                }}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+              >
+                <option value="">Bitte waehlen</option>
+                {tasks.map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">URL</label>
+              <input
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="https://..."
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Titel</label>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Anzeigetitel"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={onClose} disabled={saving}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleCreate} disabled={saving || !title.trim() || (linkType === "internal" ? !linkedTaskId : !url.trim())}>
+              {saving ? "Speichert..." : "Link anlegen"}
             </Button>
           </div>
         </div>

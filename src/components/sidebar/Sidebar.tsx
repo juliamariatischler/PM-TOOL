@@ -17,6 +17,7 @@ import {
   Folder,
   FileText,
   Zap,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
@@ -191,6 +192,22 @@ export function Sidebar({
                 selectSpace(space.id);
                 selectProject(null);
               }}
+              onDeleteSpace={async () => {
+                const confirmed = window.confirm(`Space "${space.name}" wirklich loeschen? Alle Folder, Projekte und Tasks darin werden mitgeloescht.`);
+                if (!confirmed) return;
+
+                const response = await fetch(`/api/spaces/${space.id}`, {
+                  method: "DELETE",
+                });
+
+                if (!response.ok) return;
+
+                if (selectedProjectId) {
+                  selectProject(null);
+                }
+                selectSpace(null);
+                await onReload();
+              }}
               onCreateFolder={() => setFolderSpaceId(space.id)}
               onCreateProject={(folderId) => setProjectFolderId(folderId)}
             />
@@ -253,6 +270,7 @@ function SpaceItem({
   onToggleFolder,
   onSelectProject,
   onSelectSpace,
+  onDeleteSpace,
   onCreateFolder,
   onCreateProject,
 }: {
@@ -264,6 +282,7 @@ function SpaceItem({
   onToggleFolder: (id: string) => void;
   onSelectProject: (id: string) => void;
   onSelectSpace: () => void;
+  onDeleteSpace: () => Promise<void>;
   onCreateFolder: () => void;
   onCreateProject: (folderId: string) => void;
 }) {
@@ -289,6 +308,15 @@ function SpaceItem({
           title="Folder erstellen"
         >
           <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => {
+            void onDeleteSpace();
+          }}
+          className="opacity-0 transition-opacity group-hover:opacity-100 text-gray-500 hover:text-red-400"
+          title="Space loeschen"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
 
