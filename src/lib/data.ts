@@ -768,6 +768,8 @@ export async function createTask(input: {
   dueDate?: string | null;
   description?: string | null;
   priority?: string | null;
+  effort?: number | null;
+  plannedCost?: number | null;
   position?: number | null;
 }) {
   const admin = getSupabaseAdminClient();
@@ -784,6 +786,8 @@ export async function createTask(input: {
         due_date: input.dueDate ?? null,
         description: input.description ?? null,
         priority: input.priority ?? "Medium",
+        effort: input.effort ?? 0,
+        planned_cost: input.plannedCost ?? 0,
         position: input.position ?? 0,
       })
       .select("id, title, status, assignee_id, start_date, due_date, description, parent_id, project_id, position, priority, effort, planned_cost, created_at, updated_at")

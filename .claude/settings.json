@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(sqlite3 dev.db \"SELECT id, name, email, substr\\(passwordHash,1,20\\) as hash_preview FROM User;\")"
+    ]
+  }
+}

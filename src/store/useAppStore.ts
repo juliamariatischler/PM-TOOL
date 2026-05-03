@@ -33,6 +33,7 @@ interface AppState {
   // Optimistic task updates
   updateTaskOptimistic: (taskId: string, patch: Partial<Task>) => void;
   addTaskOptimistic: (projectId: string, task: Task) => void;
+  addSubtaskOptimistic: (parentTaskId: string, task: Task) => void;
   deleteTaskOptimistic: (taskId: string) => void;
 }
 
@@ -102,6 +103,20 @@ export const useAppStore = create<AppState>((set) => ({
       })),
     })),
 
+  addSubtaskOptimistic: (parentTaskId, task) =>
+    set((s) => ({
+      spaces: s.spaces.map((space) => ({
+        ...space,
+        folders: space.folders.map((folder) => ({
+          ...folder,
+          projects: folder.projects.map((project) => ({
+            ...project,
+            tasks: addSubtaskToList(project.tasks, parentTaskId, task),
+          })),
+        })),
+      })),
+    })),
+
   deleteTaskOptimistic: (taskId) =>
     set((s) => ({
       spaces: s.spaces.map((space) => ({
@@ -129,4 +144,12 @@ function removeTaskFromList(tasks: Task[], id: string): Task[] {
   return tasks
     .filter((t) => t.id !== id)
     .map((t) => ({ ...t, subtasks: removeTaskFromList(t.subtasks, id) }));
+}
+
+function addSubtaskToList(tasks: Task[], parentTaskId: string, task: Task): Task[] {
+  return tasks.map((item) =>
+    item.id === parentTaskId
+      ? { ...item, subtasks: [...item.subtasks, task] }
+      : { ...item, subtasks: addSubtaskToList(item.subtasks, parentTaskId, task) }
+  );
 }

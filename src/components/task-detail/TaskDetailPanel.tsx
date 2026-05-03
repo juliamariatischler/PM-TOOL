@@ -25,7 +25,15 @@ type TaskDetailTask = Task & {
 };
 
 export function TaskDetailPanel() {
-  const { taskDetailOpen, selectedTaskId, closeTask, users, updateTaskOptimistic, spaces } = useAppStore();
+  const {
+    taskDetailOpen,
+    selectedTaskId,
+    closeTask,
+    users,
+    updateTaskOptimistic,
+    addSubtaskOptimistic,
+    spaces,
+  } = useAppStore();
   const [task, setTask] = useState<TaskDetailTask | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -112,6 +120,7 @@ export function TaskDetailPanel() {
     if (!response.ok) return;
 
     const created = await response.json();
+    addSubtaskOptimistic(task.id, created);
     setTask((prev) =>
       prev
         ? {

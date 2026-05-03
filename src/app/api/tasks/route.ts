@@ -23,6 +23,8 @@ export async function POST(req: Request) {
     dueDate: body.dueDate,
     description: body.description,
     priority: body.priority,
+    effort: body.effort,
+    plannedCost: body.plannedCost,
     position: body.position,
   });
   return NextResponse.json(task, { status: 201 });

@@ -8,6 +8,7 @@ import { BoardView } from "@/components/board/BoardView";
 import { WorkloadView } from "@/components/workload/WorkloadView";
 import { InboxView } from "@/components/inbox/InboxView";
 import { TaskDetailPanel } from "@/components/task-detail/TaskDetailPanel";
+import { GanttView } from "@/components/gantt/GanttView";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { MobilePlatformNotice } from "@/components/mobile/MobilePlatformNotice";
 import { Loader2, FolderOpen, LogOut, Plus } from "lucide-react";
@@ -89,8 +90,9 @@ export function AppShell({ currentUser }: { currentUser: { name: string; email: 
               {activeView === "table" && <TableView />}
               {activeView === "board" && <BoardView />}
               {activeView === "workload" && <WorkloadView />}
+              {activeView === "gantt" && <GanttView />}
               {activeView === "inbox" && <InboxView />}
-              {(activeView === "gantt" || activeView === "dashboard") && <ComingSoon view={activeView} />}
+              {activeView === "dashboard" && <ComingSoon view={activeView} />}
             </>
           )}
         </div>

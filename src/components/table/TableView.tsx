@@ -111,10 +111,22 @@ export function TableView() {
     title,
     assigneeId,
     projectId,
+    startDate,
+    dueDate,
+    priority,
+    effort,
+    plannedCost,
+    description,
   }: {
     title: string;
     assigneeId: string | null;
     projectId: string;
+    startDate: string | null;
+    dueDate: string | null;
+    priority: string;
+    effort: number;
+    plannedCost: number;
+    description: string;
   }) {
     const assignee = users.find((user) => user.id === assigneeId) ?? null;
     const tempTask: Task = {
@@ -123,16 +135,16 @@ export function TableView() {
       status: "New",
       assigneeId,
       assignee,
-      startDate: null,
-      dueDate: null,
-      description: null,
+      startDate,
+      dueDate,
+      description: description || null,
       parentId: null,
       subtasks: [],
       projectId,
       position: 999,
-      priority: "Medium",
-      effort: 0,
-      plannedCost: 0,
+      priority,
+      effort,
+      plannedCost,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -142,7 +154,17 @@ export function TableView() {
     const response = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, assigneeId, projectId }),
+      body: JSON.stringify({
+        title,
+        assigneeId,
+        projectId,
+        startDate,
+        dueDate,
+        priority,
+        effort,
+        plannedCost,
+        description: description || null,
+      }),
     });
 
     if (response.ok) {
@@ -237,9 +259,19 @@ export function TableView() {
         open={createProjectId !== null}
         users={users}
         onClose={() => setCreateProjectId(null)}
-        onCreate={async ({ title, assigneeId }) => {
+        onCreate={async ({ title, assigneeId, startDate, dueDate, priority, effort, plannedCost, description }) => {
           if (!createProjectId) return;
-          await handleCreateTask({ title, assigneeId, projectId: createProjectId });
+          await handleCreateTask({
+            title,
+            assigneeId,
+            projectId: createProjectId,
+            startDate,
+            dueDate,
+            priority,
+            effort,
+            plannedCost,
+            description,
+          });
           setCreateProjectId(null);
         }}
       />
@@ -256,10 +288,25 @@ function CreateTaskDialog({
   open: boolean;
   users: User[];
   onClose: () => void;
-  onCreate: (values: { title: string; assigneeId: string | null }) => Promise<void>;
+  onCreate: (values: {
+    title: string;
+    assigneeId: string | null;
+    startDate: string | null;
+    dueDate: string | null;
+    priority: string;
+    effort: number;
+    plannedCost: number;
+    description: string;
+  }) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState("Medium");
+  const [effort, setEffort] = useState("0");
+  const [plannedCost, setPlannedCost] = useState("0");
+  const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit() {
@@ -268,7 +315,16 @@ function CreateTaskDialog({
 
     setSaving(true);
     try {
-      await onCreate({ title: trimmedTitle, assigneeId });
+      await onCreate({
+        title: trimmedTitle,
+        assigneeId,
+        startDate: startDate || null,
+        dueDate: dueDate || null,
+        priority,
+        effort: Number.isFinite(Number(effort)) ? Number(effort) : 0,
+        plannedCost: Number.isFinite(Number(plannedCost)) ? Number(plannedCost) : 0,
+        description: description.trim(),
+      });
     } finally {
       setSaving(false);
     }
@@ -300,6 +356,77 @@ function CreateTaskDialog({
               onChange={setAssigneeId}
               placeholder="Unassigned"
               compact={false}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Start</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Ende</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Priorität</label>
+              <select
+                value={priority}
+                onChange={(event) => setPriority(event.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+              >
+                {Object.keys(PRIORITY_CONFIG).map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Aufwand (h)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={effort}
+                onChange={(event) => setEffort(event.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Kosten</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={plannedCost}
+                onChange={(event) => setPlannedCost(event.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Beschreibung</label>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={3}
+              placeholder="Kontext, Ziel oder Notizen"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
             />
           </div>
 
