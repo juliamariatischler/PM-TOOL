@@ -1,7 +1,7 @@
 "use client";
-import React, { useState } from "react";
-import { ChevronRight, ChevronDown, Plus, MoreHorizontal, X } from "lucide-react";
-import { cn, STATUS_CONFIG, STATUSES, formatDate, isOverdue, getInitials } from "@/lib/utils";
+import React, { useMemo, useState } from "react";
+import { ChevronRight, ChevronDown, Plus, MoreHorizontal, X, ArrowRightLeft, Archive, RotateCcw, Trash2 } from "lucide-react";
+import { cn, STATUS_CONFIG, STATUSES, formatDate, isOverdue, getInitials, matchesTaskLifecycle } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,7 +26,7 @@ const PRIORITY_CONFIG: Record<string, { color: string; bg: string }> = {
   Low: { color: "text-gray-400", bg: "bg-gray-50" },
 };
 
-export function TableView() {
+export function TableView({ currentUserId }: { currentUserId: string }) {
   const {
     spaces,
     users,
@@ -37,8 +37,27 @@ export function TableView() {
     updateTaskOptimistic,
     addTaskOptimistic,
     deleteTaskOptimistic,
+    setSpaces,
   } = useAppStore();
   const [createProjectId, setCreateProjectId] = useState<string | null>(null);
+  const [movingTask, setMovingTask] = useState<Task | null>(null);
+
+  const allProjects = useMemo(
+    () =>
+      spaces.flatMap((space) =>
+        space.folders.flatMap((folder) =>
+          folder.projects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            folderName: folder.name,
+            spaceName: space.name,
+          }))
+        )
+      ),
+    [spaces]
+  );
+
+  const isLifecycleView = filters.lifecycle === "archived" || filters.lifecycle === "deleted";
 
   const visibleData = (() => {
     if (selectedProjectId) {
@@ -70,13 +89,23 @@ export function TableView() {
     return tasks
       .filter((task) => {
         if (filters.status.length && !filters.status.includes(task.status)) return false;
-        if (filters.assigneeId.length && !filters.assigneeId.includes(task.assigneeId ?? "")) return false;
+        if (filters.assigneeId.length && !task.assigneeIds.some((id) => filters.assigneeId.includes(id))) return false;
         if (filters.createdById.length && !filters.createdById.includes(task.createdById ?? "")) return false;
         if (filters.search && !task.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
+        if (!matchesTaskLifecycle(task, filters.lifecycle)) return false;
         return true;
       })
       .map((task) => ({ ...task, subtasks: filterTasks(task.subtasks) }));
   }
+
+  const visibleSections = visibleData
+    .map(({ space, folder, project }) => ({
+      space,
+      folder,
+      project,
+      tasks: filterTasks(project.tasks),
+    }))
+    .filter((section) => !isLifecycleView || section.tasks.length > 0);
 
   async function persistTaskStatus(taskId: string, status: string) {
     updateTaskOptimistic(taskId, { status });
@@ -92,14 +121,19 @@ export function TableView() {
     }
   }
 
-  async function persistTaskAssignee(taskId: string, assigneeId: string | null) {
-    const assignee = users.find((user) => user.id === assigneeId) ?? null;
-    updateTaskOptimistic(taskId, { assigneeId, assignee });
+  async function persistTaskAssignee(taskId: string, assigneeIds: string[]) {
+    const assignees = users.filter((user) => assigneeIds.includes(user.id));
+    updateTaskOptimistic(taskId, {
+      assigneeId: assignees[0]?.id ?? null,
+      assignee: assignees[0] ?? null,
+      assigneeIds,
+      assignees,
+    });
 
     const response = await fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assigneeId }),
+      body: JSON.stringify({ assigneeIds }),
     });
 
     if (response.ok) {
@@ -110,7 +144,7 @@ export function TableView() {
 
   async function handleCreateTask({
     title,
-    assigneeId,
+    assigneeIds,
     projectId,
     startDate,
     dueDate,
@@ -120,7 +154,7 @@ export function TableView() {
     description,
   }: {
     title: string;
-    assigneeId: string | null;
+    assigneeIds: string[];
     projectId: string;
     startDate: string | null;
     dueDate: string | null;
@@ -129,14 +163,16 @@ export function TableView() {
     plannedCost: number;
     description: string;
   }) {
-    const assignee = users.find((user) => user.id === assigneeId) ?? null;
+    const assignees = users.filter((user) => assigneeIds.includes(user.id));
     const tempTask: Task = {
       id: `temp-${Date.now()}`,
       title,
       status: "New",
-      createdById: null,
-      assigneeId,
-      assignee,
+      createdById: currentUserId,
+      assigneeId: assignees[0]?.id ?? null,
+      assignee: assignees[0] ?? null,
+      assigneeIds,
+      assignees,
       startDate,
       dueDate,
       description: description || null,
@@ -149,6 +185,8 @@ export function TableView() {
       actualTimeMinutes: 0,
       timerStartedAt: null,
       plannedCost,
+      archivedAt: null,
+      deletedAt: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -160,7 +198,7 @@ export function TableView() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title,
-        assigneeId,
+        assigneeIds,
         projectId,
         startDate,
         dueDate,
@@ -180,15 +218,73 @@ export function TableView() {
     deleteTaskOptimistic(tempTask.id);
   }
 
+  async function reloadWorkspace() {
+    const response = await fetch("/api/spaces");
+    if (!response.ok) return;
+    const nextSpaces = await response.json();
+    setSpaces(nextSpaces);
+  }
+
+  async function handleMoveTask(taskId: string, projectId: string) {
+    const response = await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, parentId: null, position: 999 }),
+    });
+
+    if (!response.ok) return;
+
+    await reloadWorkspace();
+    setMovingTask(null);
+  }
+
+  async function handleLifecycleTask(taskId: string, patch: Pick<Task, "archivedAt" | "deletedAt">) {
+    const response = await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+
+    if (!response.ok) return;
+    await reloadWorkspace();
+  }
+
+  async function handleEmptyTrash() {
+    const confirmed = window.confirm("Papierkorb wirklich dauerhaft leeren?");
+    if (!confirmed) return;
+
+    const response = await fetch("/api/tasks/trash", { method: "DELETE" });
+    if (!response.ok) return;
+    await reloadWorkspace();
+  }
+
   return (
     <>
-      <div className="flex-1 overflow-auto">
-        {visibleData.length === 0 ? (
+      <div className="flex h-full flex-1 flex-col overflow-hidden">
+        {filters.lifecycle === "deleted" ? (
+          <div className="flex items-center justify-between border-b border-red-100 bg-red-50/70 px-4 py-2 text-sm">
+            <span className="text-red-700">Papierkorbansicht. Tasks lassen sich hier wiederherstellen oder gesammelt leeren.</span>
+            <button
+              onClick={handleEmptyTrash}
+              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+            >
+              Papierkorb leeren
+            </button>
+          </div>
+        ) : null}
+        <div className="flex-1 overflow-auto">
+        {visibleSections.length === 0 ? (
           <div className="flex h-full min-h-[320px] items-center justify-center p-8">
             <div className="max-w-md text-center">
-              <h3 className="text-lg font-semibold text-gray-800">Noch kein Projekt vorhanden</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {isLifecycleView ? "Keine Tasks in dieser Ansicht" : "Noch kein Projekt vorhanden"}
+              </h3>
               <p className="mt-2 text-sm text-gray-400">
-                Lege zuerst in der Sidebar einen Folder und danach ein Projekt an. Danach kannst du hier Tasks erstellen und zuweisen.
+                {isLifecycleView
+                  ? filters.lifecycle === "archived"
+                    ? "Aktuell ist kein Task archiviert."
+                    : "Aktuell liegt kein Task im Papierkorb."
+                  : "Lege zuerst in der Sidebar einen Folder und danach ein Projekt an. Danach kannst du hier Tasks erstellen und zuweisen."}
               </p>
             </div>
           </div>
@@ -220,42 +316,57 @@ export function TableView() {
           </thead>
 
           <tbody>
-            {visibleData.map(({ space, folder, project }) => {
-              const tasks = filterTasks(project.tasks);
-
+            {visibleSections.map(({ space, folder, project, tasks }) => {
               return (
                 <React.Fragment key={project.id}>
-                  <ProjectHeader space={space} folder={folder} project={project} />
+                  <ProjectHeader space={space} folder={folder} project={project} taskCount={tasks.length} />
                   {tasks.map((task) => (
                     <TaskRow
                       key={task.id}
                       task={task}
                       depth={0}
                       location={`${space.name} / ${folder.name} / ${project.name}`}
+                      lifecycle={filters.lifecycle}
                       onOpen={() => openTask(task.id)}
                       onStatusChange={(status) => persistTaskStatus(task.id, status)}
-                      onAssigneeChange={(assigneeId) => persistTaskAssignee(task.id, assigneeId)}
+                      onAssigneeChange={(assigneeIds) => persistTaskAssignee(task.id, assigneeIds)}
+                      onMove={(nextTask) => setMovingTask(nextTask)}
+                      onArchive={(nextTask) =>
+                        handleLifecycleTask(nextTask.id, {
+                          archivedAt: nextTask.archivedAt ? null : new Date().toISOString(),
+                          deletedAt: null,
+                        })
+                      }
+                      onTrash={(nextTask) =>
+                        handleLifecycleTask(nextTask.id, {
+                          archivedAt: null,
+                          deletedAt: nextTask.deletedAt ? null : new Date().toISOString(),
+                        })
+                      }
                     />
                   ))}
-                  <tr className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-2 py-1.5" />
-                    <td className="px-1" />
-                    <td colSpan={COLUMNS.length + 1} className="px-3 py-1.5">
-                      <button
-                        onClick={() => setCreateProjectId(project.id)}
-                        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#00B050]"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Add task
-                      </button>
-                    </td>
-                  </tr>
+                  {filters.lifecycle === "active" ? (
+                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-2 py-1.5" />
+                      <td className="px-1" />
+                      <td colSpan={COLUMNS.length + 1} className="px-3 py-1.5">
+                        <button
+                          onClick={() => setCreateProjectId(project.id)}
+                          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#00B050]"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add task
+                        </button>
+                      </td>
+                    </tr>
+                  ) : null}
                 </React.Fragment>
               );
             })}
           </tbody>
         </table>
         )}
+        </div>
       </div>
 
       <CreateTaskDialog
@@ -263,11 +374,11 @@ export function TableView() {
         open={createProjectId !== null}
         users={users}
         onClose={() => setCreateProjectId(null)}
-        onCreate={async ({ title, assigneeId, startDate, dueDate, priority, effort, plannedCost, description }) => {
+        onCreate={async ({ title, assigneeIds, startDate, dueDate, priority, effort, plannedCost, description }) => {
           if (!createProjectId) return;
           await handleCreateTask({
             title,
-            assigneeId,
+            assigneeIds,
             projectId: createProjectId,
             startDate,
             dueDate,
@@ -278,6 +389,14 @@ export function TableView() {
           });
           setCreateProjectId(null);
         }}
+      />
+
+      <MoveTaskDialog
+        open={movingTask !== null}
+        task={movingTask}
+        projects={allProjects}
+        onClose={() => setMovingTask(null)}
+        onMove={handleMoveTask}
       />
     </>
   );
@@ -294,7 +413,7 @@ function CreateTaskDialog({
   onClose: () => void;
   onCreate: (values: {
     title: string;
-    assigneeId: string | null;
+    assigneeIds: string[];
     startDate: string | null;
     dueDate: string | null;
     priority: string;
@@ -304,7 +423,7 @@ function CreateTaskDialog({
   }) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
-  const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("Medium");
@@ -321,7 +440,7 @@ function CreateTaskDialog({
     try {
       await onCreate({
         title: trimmedTitle,
-        assigneeId,
+        assigneeIds,
         startDate: startDate || null,
         dueDate: dueDate || null,
         priority,
@@ -355,9 +474,9 @@ function CreateTaskDialog({
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Zuständig</label>
             <AssigneeDropdown
-              assigneeId={assigneeId}
+              assigneeIds={assigneeIds}
               users={users}
-              onChange={setAssigneeId}
+              onChange={setAssigneeIds}
               placeholder="Unassigned"
               compact={false}
             />
@@ -456,7 +575,17 @@ function CreateTaskDialog({
   );
 }
 
-function ProjectHeader({ space, folder, project }: { space: Space; folder: { name: string }; project: Project }) {
+function ProjectHeader({
+  space,
+  folder,
+  project,
+  taskCount,
+}: {
+  space: Space;
+  folder: { name: string };
+  project: Project;
+  taskCount: number;
+}) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -477,7 +606,7 @@ function ProjectHeader({ space, folder, project }: { space: Space; folder: { nam
             {folder.name} · {space.name}
           </span>
           <span className="ml-1 rounded-full bg-gray-200 px-1.5 py-0.5 text-[10px] text-gray-600">
-            {project.tasks.length}
+            {taskCount}
           </span>
         </div>
       </td>
@@ -489,25 +618,70 @@ function TaskRow({
   task,
   depth,
   location,
+  lifecycle,
   onOpen,
   onStatusChange,
   onAssigneeChange,
+  onMove,
+  onArchive,
+  onTrash,
 }: {
   task: Task;
   depth: number;
   location: string;
+  lifecycle: "active" | "archived" | "deleted" | "all";
   onOpen: () => void;
   onStatusChange: (status: string) => void;
-  onAssigneeChange: (assigneeId: string | null) => void;
+  onAssigneeChange: (assigneeIds: string[]) => void;
+  onMove: (task: Task) => void;
+  onArchive: (task: Task) => void;
+  onTrash: (task: Task) => void;
 }) {
   const { expandedTaskIds, toggleTaskExpand, users } = useAppStore();
   const isExpanded = expandedTaskIds.has(task.id);
   const hasSubtasks = task.subtasks.length > 0;
   const overdue = isOverdue(task.dueDate) && task.status !== "Completed";
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(task.title);
+
+  React.useEffect(() => {
+    setTitleDraft(task.title);
+  }, [task.title]);
+
+  async function saveTitle() {
+    const nextTitle = titleDraft.trim();
+    if (!nextTitle) {
+      setTitleDraft(task.title);
+      setEditingTitle(false);
+      return;
+    }
+
+    if (nextTitle === task.title) {
+      setEditingTitle(false);
+      return;
+    }
+
+    useAppStore.getState().updateTaskOptimistic(task.id, { title: nextTitle });
+    const response = await fetch(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: nextTitle }),
+    });
+
+    if (response.ok) {
+      const updated = await response.json();
+      useAppStore.getState().updateTaskOptimistic(task.id, updated);
+    } else {
+      useAppStore.getState().updateTaskOptimistic(task.id, { title: task.title });
+      setTitleDraft(task.title);
+    }
+
+    setEditingTitle(false);
+  }
 
   return (
     <>
-      <tr className="group cursor-pointer border-b border-gray-100 hover:bg-blue-50/30" onClick={onOpen}>
+      <tr className="group cursor-pointer border-b border-gray-100 hover:bg-blue-50/30" onClick={() => !editingTitle && onOpen()}>
         <td className="px-2 py-2" onClick={(event) => event.stopPropagation()}>
           <input type="checkbox" className="rounded border-gray-300 opacity-0 group-hover:opacity-100" />
         </td>
@@ -532,9 +706,48 @@ function TaskRow({
 
         <td className="min-w-[280px] px-3 py-2">
           <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
-            <span className="max-w-[240px] truncate text-sm text-gray-800 hover:text-[#00B050]" title={task.title}>
-              {task.title}
-            </span>
+            {editingTitle ? (
+              <input
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={() => void saveTitle()}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void saveTitle();
+                  }
+                  if (event.key === "Escape") {
+                    setTitleDraft(task.title);
+                    setEditingTitle(false);
+                  }
+                }}
+                autoFocus
+                className="w-full max-w-[240px] rounded border border-[#00B050] bg-white px-2 py-1 text-sm text-gray-800 focus:outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  setEditingTitle(true);
+                }}
+                className="max-w-[240px] truncate text-left text-sm text-gray-800 hover:text-[#00B050]"
+                title="Doppelklick zum Bearbeiten"
+              >
+                {task.title}
+              </button>
+            )}
+            {task.archivedAt ? (
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                Archiv
+              </span>
+            ) : null}
+            {task.deletedAt ? (
+              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                Papierkorb
+              </span>
+            ) : null}
             {hasSubtasks && (
               <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-400">
                 {task.subtasks.length}
@@ -549,7 +762,7 @@ function TaskRow({
 
         <td className="w-28 px-3 py-2" onClick={(event) => event.stopPropagation()}>
           <AssigneeDropdown
-            assigneeId={task.assigneeId}
+            assigneeIds={task.assigneeIds}
             users={users}
             onChange={onAssigneeChange}
             placeholder="—"
@@ -594,9 +807,39 @@ function TaskRow({
         </td>
 
         <td className="px-2 py-2" onClick={(event) => event.stopPropagation()}>
-          <button className="text-gray-400 opacity-0 hover:text-gray-600 group-hover:opacity-100">
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
+          <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            {lifecycle === "active" && !task.deletedAt ? (
+              <button
+                onClick={() => onMove(task)}
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                title="Task verschieben"
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+              </button>
+            ) : null}
+            {lifecycle !== "deleted" ? (
+              <button
+                onClick={() => onArchive(task)}
+                className={cn(
+                  "rounded p-1 hover:bg-gray-100",
+                  lifecycle === "archived" ? "text-emerald-600 hover:text-emerald-700" : "text-gray-400 hover:text-gray-600"
+                )}
+                title={task.archivedAt ? "Aus Archiv holen" : "Archivieren"}
+              >
+                {task.archivedAt ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+              </button>
+            ) : null}
+            <button
+              onClick={() => onTrash(task)}
+              className={cn(
+                "rounded p-1 hover:bg-gray-100",
+                task.deletedAt ? "text-emerald-600 hover:text-emerald-700" : "text-gray-400 hover:text-red-600"
+              )}
+              title={task.deletedAt ? "Wiederherstellen" : "In Papierkorb"}
+            >
+              {task.deletedAt ? <RotateCcw className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+            </button>
+          </div>
         </td>
       </tr>
 
@@ -608,6 +851,7 @@ function TaskRow({
             task={subtask}
             depth={depth + 1}
             location={location}
+            lifecycle={lifecycle}
             onOpen={() => useAppStore.getState().openTask(subtask.id)}
             onStatusChange={(status) => {
               useAppStore.getState().updateTaskOptimistic(subtask.id, { status });
@@ -623,14 +867,19 @@ function TaskRow({
                   }
                 });
             }}
-            onAssigneeChange={(assigneeId) => {
+            onAssigneeChange={(assigneeIds) => {
               const availableUsers = useAppStore.getState().users;
-              const assignee = availableUsers.find((user) => user.id === assigneeId) ?? null;
-              useAppStore.getState().updateTaskOptimistic(subtask.id, { assigneeId, assignee });
+              const assignees = availableUsers.filter((user) => assigneeIds.includes(user.id));
+              useAppStore.getState().updateTaskOptimistic(subtask.id, {
+                assigneeId: assignees[0]?.id ?? null,
+                assignee: assignees[0] ?? null,
+                assigneeIds,
+                assignees,
+              });
               fetch(`/api/tasks/${subtask.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ assigneeId }),
+                body: JSON.stringify({ assigneeIds }),
               })
                 .then((response) => (response.ok ? response.json() : null))
                 .then((updated) => {
@@ -639,27 +888,99 @@ function TaskRow({
                   }
                 });
             }}
+            onMove={onMove}
+            onArchive={onArchive}
+            onTrash={onTrash}
           />
         ))}
     </>
   );
 }
 
+function MoveTaskDialog({
+  open,
+  task,
+  projects,
+  onClose,
+  onMove,
+}: {
+  open: boolean;
+  task: Task | null;
+  projects: Array<{ id: string; name: string; folderName: string; spaceName: string }>;
+  onClose: () => void;
+  onMove: (taskId: string, projectId: string) => Promise<void>;
+}) {
+  const [projectId, setProjectId] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    setProjectId(task?.projectId ?? "");
+  }, [task]);
+
+  async function handleMove() {
+    if (!task || !projectId) return;
+
+    setSaving(true);
+    try {
+      await onMove(task.id, projectId);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Task verschieben</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 px-6 pb-6">
+          <div className="text-sm text-gray-600">{task?.title}</div>
+          <select
+            value={projectId}
+            onChange={(event) => setProjectId(event.target.value)}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+          >
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.spaceName} / {project.folderName} / {project.name}
+              </option>
+            ))}
+          </select>
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600">
+              Abbrechen
+            </button>
+            <button
+              onClick={handleMove}
+              disabled={saving || !projectId}
+              className="rounded-lg bg-[#00B050] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {saving ? "Speichert..." : "Verschieben"}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AssigneeDropdown({
-  assigneeId,
+  assigneeIds,
   users,
   onChange,
   placeholder,
   compact,
 }: {
-  assigneeId: string | null;
+  assigneeIds: string[];
   users: User[];
-  onChange: (assigneeId: string | null) => void;
+  onChange: (assigneeIds: string[]) => void;
   placeholder: string;
   compact: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const assignee = users.find((user) => user.id === assigneeId) ?? null;
+  const assignees = users.filter((user) => assigneeIds.includes(user.id));
 
   return (
     <div className="relative">
@@ -670,15 +991,19 @@ function AssigneeDropdown({
           compact ? "min-h-6 text-xs text-gray-600" : "min-h-9 w-full border border-gray-200 px-3 py-2 text-sm text-gray-700"
         )}
       >
-        {assignee ? (
+        {assignees.length > 0 ? (
           <>
-            <Avatar className="h-5 w-5">
-              <AvatarFallback className="text-[9px]" style={{ backgroundColor: assignee.color + "30", color: assignee.color }}>
-                {getInitials(assignee.name)}
-              </AvatarFallback>
-            </Avatar>
-            <span className={cn("truncate", compact ? "max-w-[60px]" : "max-w-[180px]")}>
-              {compact ? assignee.name.split(" ")[0] : assignee.name}
+            <div className="flex -space-x-2">
+              {assignees.slice(0, 3).map((assignee) => (
+                <Avatar key={assignee.id} className="h-5 w-5 border border-white">
+                  <AvatarFallback className="text-[9px]" style={{ backgroundColor: assignee.color + "30", color: assignee.color }}>
+                    {getInitials(assignee.name)}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+            </div>
+            <span className={cn("truncate", compact ? "max-w-[80px]" : "max-w-[180px]")}>
+              {compact ? `${assignees.length}` : assignees.map((assignee) => assignee.name).join(", ")}
             </span>
           </>
         ) : (
@@ -692,7 +1017,7 @@ function AssigneeDropdown({
           <div className="absolute left-0 top-full z-20 mt-1 min-w-[190px] rounded-xl border border-gray-200 bg-white py-1 shadow-xl">
             <button
               onClick={() => {
-                onChange(null);
+                onChange([]);
                 setOpen(false);
               }}
               className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:bg-gray-50"
@@ -704,10 +1029,16 @@ function AssigneeDropdown({
               <button
                 key={user.id}
                 onClick={() => {
-                  onChange(user.id);
-                  setOpen(false);
+                  onChange(
+                    assigneeIds.includes(user.id)
+                      ? assigneeIds.filter((id) => id !== user.id)
+                      : [...assigneeIds, user.id]
+                  );
                 }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50"
+                className={cn(
+                  "flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50",
+                  assigneeIds.includes(user.id) && "bg-green-50"
+                )}
               >
                 <Avatar className="h-6 w-6">
                   <AvatarFallback className="text-[9px]" style={{ backgroundColor: user.color + "30", color: user.color }}>

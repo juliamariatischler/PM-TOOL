@@ -68,6 +68,8 @@ type DbTaskRow = {
   actual_time_minutes: number;
   timer_started_at: string | null;
   planned_cost: number;
+  archived_at: string | null;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -131,6 +133,12 @@ type DbMicrosoftConnectionRow = {
   updated_at: string;
 };
 
+type DbTaskAssigneeRow = {
+  task_id: string;
+  user_id: string;
+  created_at: string;
+};
+
 const TASK_SELECT = [
   "id",
   "title",
@@ -148,6 +156,28 @@ const TASK_SELECT = [
   "actual_time_minutes",
   "timer_started_at",
   "planned_cost",
+  "archived_at",
+  "deleted_at",
+  "created_at",
+  "updated_at",
+].join(", ");
+
+const PARTIAL_TASK_SELECT = [
+  "id",
+  "title",
+  "status",
+  "assignee_id",
+  "start_date",
+  "due_date",
+  "description",
+  "parent_id",
+  "project_id",
+  "position",
+  "priority",
+  "effort",
+  "planned_cost",
+  "archived_at",
+  "deleted_at",
   "created_at",
   "updated_at",
 ].join(", ");
@@ -181,14 +211,18 @@ function mapUser(row: DbUserRow): User {
   };
 }
 
-function mapTask(row: DbTaskRow, usersById: Map<string, User>): Task {
+function mapTask(row: DbTaskRow, usersById: Map<string, User>, assigneesByTaskId: Map<string, User[]>): Task {
+  const assignees = assigneesByTaskId.get(row.id) ?? (row.assignee_id ? [usersById.get(row.assignee_id)].filter(Boolean) as User[] : []);
+  const primaryAssignee = assignees[0] ?? (row.assignee_id ? usersById.get(row.assignee_id) ?? null : null);
   return {
     id: row.id,
     title: row.title,
     status: row.status,
     createdById: row.created_by,
-    assigneeId: row.assignee_id,
-    assignee: row.assignee_id ? usersById.get(row.assignee_id) ?? null : null,
+    assigneeId: primaryAssignee?.id ?? row.assignee_id,
+    assignee: primaryAssignee,
+    assigneeIds: assignees.map((user) => user.id),
+    assignees,
     startDate: row.start_date,
     dueDate: row.due_date,
     description: row.description,
@@ -201,6 +235,8 @@ function mapTask(row: DbTaskRow, usersById: Map<string, User>): Task {
     actualTimeMinutes: row.actual_time_minutes,
     timerStartedAt: row.timer_started_at,
     plannedCost: row.planned_cost,
+    archivedAt: row.archived_at,
+    deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -224,6 +260,8 @@ function normalizeTaskRow(row: Partial<DbTaskRow> & Pick<DbTaskRow, "id" | "titl
     actual_time_minutes: row.actual_time_minutes ?? 0,
     timer_started_at: row.timer_started_at ?? null,
     planned_cost: row.planned_cost,
+    archived_at: row.archived_at ?? null,
+    deleted_at: row.deleted_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -231,7 +269,7 @@ function normalizeTaskRow(row: Partial<DbTaskRow> & Pick<DbTaskRow, "id" | "titl
 
 function isMissingTaskColumnError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return ["created_by", "actual_time_minutes", "timer_started_at"].some((column) =>
+  return ["created_by", "actual_time_minutes", "timer_started_at", "archived_at", "deleted_at"].some((column) =>
     message.includes(column)
   );
 }
@@ -307,12 +345,12 @@ function sortTaskTree(tasks: Task[]) {
   }
 }
 
-function buildTaskTree(rows: DbTaskRow[], usersById: Map<string, User>) {
+function buildTaskTree(rows: DbTaskRow[], usersById: Map<string, User>, assigneesByTaskId: Map<string, User[]>) {
   const tasksById = new Map<string, Task>();
   const roots: Task[] = [];
 
   for (const row of rows) {
-    tasksById.set(row.id, mapTask(row, usersById));
+    tasksById.set(row.id, mapTask(row, usersById, assigneesByTaskId));
   }
 
   for (const row of rows) {
@@ -343,6 +381,10 @@ function findTaskInTree(tasks: Task[], id: string): Task | null {
   return null;
 }
 
+function collectTaskSubtreeIds(task: Task): string[] {
+  return [task.id, ...task.subtasks.flatMap((subtask) => collectTaskSubtreeIds(subtask))];
+}
+
 async function runQuery<T>(promise: PromiseLike<{ data: T | null; error: { message: string } | null }>) {
   const { data, error } = await promise;
   if (error) {
@@ -352,25 +394,33 @@ async function runQuery<T>(promise: PromiseLike<{ data: T | null; error: { messa
 }
 
 async function runTaskQuery<T>(
-  fullQuery: () => PromiseLike<{ data: T | null; error: { message: string } | null }>,
-  legacyQuery: () => PromiseLike<{ data: T | null; error: { message: string } | null }>
+  queries: Array<() => PromiseLike<{ data: T | null; error: { message: string } | null }>>
 ) {
-  try {
-    return await runQuery(fullQuery());
-  } catch (error) {
-    if (!isMissingTaskColumnError(error)) {
-      throw error;
+  let lastError: unknown;
+
+  for (const query of queries) {
+    try {
+      return await runQuery(query());
+    } catch (error) {
+      if (!isMissingTaskColumnError(error)) {
+        throw error;
+      }
+      lastError = error;
     }
-    return await runQuery(legacyQuery());
   }
+
+  throw lastError instanceof Error ? lastError : new Error("Unable to query tasks");
 }
 
 async function selectTaskRows(
   buildQuery: (select: string) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
 ) {
   const rows = await runTaskQuery(
-    () => buildQuery(TASK_SELECT),
-    () => buildQuery(LEGACY_TASK_SELECT)
+    [
+      () => buildQuery(TASK_SELECT),
+      () => buildQuery(PARTIAL_TASK_SELECT),
+      () => buildQuery(LEGACY_TASK_SELECT),
+    ]
   );
 
   return (rows ?? []).map((row) => normalizeTaskRow(row as Partial<DbTaskRow> & Pick<DbTaskRow, "id" | "title" | "status" | "project_id" | "position" | "priority" | "effort" | "planned_cost" | "created_at" | "updated_at">));
@@ -380,13 +430,80 @@ async function selectTaskRow(
   buildQuery: (select: string) => PromiseLike<{ data: unknown | null; error: { message: string } | null }>
 ) {
   const row = await runTaskQuery(
-    () => buildQuery(TASK_SELECT),
-    () => buildQuery(LEGACY_TASK_SELECT)
+    [
+      () => buildQuery(TASK_SELECT),
+      () => buildQuery(PARTIAL_TASK_SELECT),
+      () => buildQuery(LEGACY_TASK_SELECT),
+    ]
   );
 
   return row
     ? normalizeTaskRow(row as Partial<DbTaskRow> & Pick<DbTaskRow, "id" | "title" | "status" | "project_id" | "position" | "priority" | "effort" | "planned_cost" | "created_at" | "updated_at">)
     : null;
+}
+
+async function listTaskAssignees(taskIds?: string[]) {
+  const admin = getSupabaseAdminClient();
+  const users = await listUsers();
+  const usersById = new Map(users.map((user) => [user.id, user]));
+
+  let query = admin
+    .from("task_assignees")
+    .select("task_id, user_id, created_at")
+    .order("created_at", { ascending: true });
+
+  if (taskIds && taskIds.length > 0) {
+    query = query.in("task_id", taskIds);
+  }
+
+  const rows = await runQuery<DbTaskAssigneeRow[]>(query).catch(() => []);
+  const assigneesByTaskId = new Map<string, User[]>();
+
+  for (const row of rows ?? []) {
+    const user = usersById.get(row.user_id);
+    if (!user) continue;
+    const list = assigneesByTaskId.get(row.task_id) ?? [];
+    list.push(user);
+    assigneesByTaskId.set(row.task_id, list);
+  }
+
+  return assigneesByTaskId;
+}
+
+async function syncTaskAssignees(taskId: string, assigneeIds: string[]) {
+  const admin = getSupabaseAdminClient();
+  const uniqueAssigneeIds = Array.from(new Set(assigneeIds.filter(Boolean)));
+
+  await runQuery(
+    admin
+      .from("task_assignees")
+      .delete()
+      .eq("task_id", taskId)
+      .select("task_id")
+  );
+
+  if (uniqueAssigneeIds.length > 0) {
+    await runQuery(
+      admin
+        .from("task_assignees")
+        .insert(
+          uniqueAssigneeIds.map((userId) => ({
+            task_id: taskId,
+            user_id: userId,
+          }))
+        )
+        .select("task_id")
+    );
+  }
+
+  await runQuery(
+    admin
+      .from("tasks")
+      .update({ assignee_id: uniqueAssigneeIds[0] ?? null })
+      .eq("id", taskId)
+      .select("id")
+      .single()
+  );
 }
 
 function ensurePresent<T>(value: T | null, message: string): T {
@@ -865,6 +982,9 @@ export async function listInboxItems(userId: string) {
         commentId: comment.id,
         taskId: task.id,
         taskTitle: task.title,
+        taskStatus: task.status,
+        taskArchivedAt: task.archived_at,
+        taskDeletedAt: task.deleted_at,
         projectName: project.name,
         folderName: folder.name,
         spaceName: space.name,
@@ -975,6 +1095,7 @@ export async function listWorkspace() {
   ]);
 
   const usersById = new Map(users.map((user) => [user.id, user]));
+  const assigneesByTaskId = await listTaskAssignees((taskRows ?? []).map((row) => row.id));
   const taskRowsByProject = new Map<string, DbTaskRow[]>();
 
   for (const row of taskRows ?? []) {
@@ -985,7 +1106,7 @@ export async function listWorkspace() {
 
   const projectsByFolder = new Map<string, Project[]>();
   for (const row of projectRows ?? []) {
-    const { roots } = buildTaskTree(taskRowsByProject.get(row.id) ?? [], usersById);
+    const { roots } = buildTaskTree(taskRowsByProject.get(row.id) ?? [], usersById, assigneesByTaskId);
     const project: Project = {
       id: row.id,
       name: row.name,
@@ -1066,7 +1187,8 @@ export async function getTaskDetail(id: string) {
   ]);
 
   const usersById = new Map(users.map((user) => [user.id, user]));
-  const { roots } = buildTaskTree(taskRows ?? [], usersById);
+  const assigneesByTaskId = await listTaskAssignees((taskRows ?? []).map((row) => row.id));
+  const { roots } = buildTaskTree(taskRows ?? [], usersById, assigneesByTaskId);
   const task = findTaskInTree(roots, id);
 
   if (!task) return null;
@@ -1270,6 +1392,7 @@ export async function createTask(input: {
   creatorId?: string | null;
   status?: string | null;
   assigneeId?: string | null;
+  assigneeIds?: string[] | null;
   parentId?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
@@ -1286,7 +1409,7 @@ export async function createTask(input: {
     title: input.title,
     project_id: input.projectId,
     status: input.status ?? "New",
-    assignee_id: input.assigneeId ?? null,
+    assignee_id: input.assigneeIds?.[0] ?? input.assigneeId ?? null,
     parent_id: input.parentId ?? null,
     start_date: input.startDate ?? null,
     due_date: input.dueDate ?? null,
@@ -1295,6 +1418,8 @@ export async function createTask(input: {
     effort: input.effort ?? 0,
     planned_cost: input.plannedCost ?? 0,
     position: input.position ?? 0,
+    archived_at: null,
+    deleted_at: null,
   };
   const row = ensurePresent(await selectTaskRow((select) =>
     admin
@@ -1321,16 +1446,24 @@ export async function createTask(input: {
     );
   }), "Unable to create task");
 
+  await syncTaskAssignees(row.id, input.assigneeIds ?? (input.assigneeId ? [input.assigneeId] : []));
+
   const users = await listUsers();
   const usersById = new Map(users.map((user) => [user.id, user]));
-  return mapTask(row, usersById);
+  const assigneesByTaskId = await listTaskAssignees([row.id]);
+  return mapTask(row, usersById, assigneesByTaskId);
 }
 
 export async function updateTask(id: string, patch: Record<string, unknown>) {
   const admin = getSupabaseAdminClient();
+  const lifecyclePatch = {
+    ...(patch.archivedAt !== undefined ? { archived_at: patch.archivedAt || null } : {}),
+    ...(patch.deletedAt !== undefined ? { deleted_at: patch.deletedAt || null } : {}),
+  };
   const basePatch = {
     ...(patch.title !== undefined ? { title: patch.title } : {}),
     ...(patch.status !== undefined ? { status: patch.status } : {}),
+    ...(patch.projectId !== undefined ? { project_id: patch.projectId } : {}),
     ...(patch.assigneeId !== undefined ? { assignee_id: patch.assigneeId || null } : {}),
     ...(patch.startDate !== undefined ? { start_date: patch.startDate || null } : {}),
     ...(patch.dueDate !== undefined ? { due_date: patch.dueDate || null } : {}),
@@ -1341,11 +1474,38 @@ export async function updateTask(id: string, patch: Record<string, unknown>) {
     ...(patch.position !== undefined ? { position: patch.position } : {}),
     ...(patch.parentId !== undefined ? { parent_id: patch.parentId || null } : {}),
   };
+
+  if (Object.keys(lifecyclePatch).length > 0) {
+    const taskRows = await selectTaskRows((select) =>
+      admin
+        .from("tasks")
+        .select(select)
+        .order("project_id", { ascending: true })
+        .order("position", { ascending: true })
+    );
+    const { roots } = buildTaskTree(taskRows, new Map(), new Map());
+    const task = findTaskInTree(roots, id);
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    const ids = collectTaskSubtreeIds(task);
+    await runQuery(
+      admin
+        .from("tasks")
+        .update(lifecyclePatch)
+        .in("id", ids)
+        .select("id")
+    );
+  }
+
   const row = ensurePresent(await selectTaskRow((select) =>
     admin
       .from("tasks")
       .update({
         ...basePatch,
+        ...lifecyclePatch,
         ...(patch.actualTimeMinutes !== undefined ? { actual_time_minutes: patch.actualTimeMinutes } : {}),
         ...(patch.timerStartedAt !== undefined ? { timer_started_at: patch.timerStartedAt || null } : {}),
       })
@@ -1360,19 +1520,77 @@ export async function updateTask(id: string, patch: Record<string, unknown>) {
     return selectTaskRow((select) =>
       admin
         .from("tasks")
-        .update(basePatch)
+        .update({ ...basePatch, ...lifecyclePatch })
         .eq("id", id)
         .select(select)
         .single()
     );
   }), "Unable to update task");
 
+  if (patch.assigneeIds !== undefined) {
+    await syncTaskAssignees(
+      id,
+      Array.isArray(patch.assigneeIds) ? patch.assigneeIds.map((value) => String(value)) : []
+    );
+  } else if (patch.assigneeId !== undefined) {
+    await syncTaskAssignees(id, patch.assigneeId ? [String(patch.assigneeId)] : []);
+  }
+
   const users = await listUsers();
   const usersById = new Map(users.map((user) => [user.id, user]));
-  return mapTask(row, usersById);
+  const assigneesByTaskId = await listTaskAssignees([row.id]);
+  return mapTask(row, usersById, assigneesByTaskId);
 }
 
 export async function deleteTask(id: string) {
   const admin = getSupabaseAdminClient();
-  await runQuery(admin.from("tasks").delete().eq("id", id).select("id").single());
+  const taskRows = await selectTaskRows((select) =>
+    admin
+      .from("tasks")
+      .select(select)
+      .order("project_id", { ascending: true })
+      .order("position", { ascending: true })
+  );
+  const { roots } = buildTaskTree(taskRows, new Map(), new Map());
+  const task = findTaskInTree(roots, id);
+
+  if (!task) {
+    throw new Error("Task not found");
+  }
+
+  const deletedAt = new Date().toISOString();
+  const ids = collectTaskSubtreeIds(task);
+
+  try {
+    await runQuery(
+      admin
+        .from("tasks")
+        .update({ deleted_at: deletedAt, archived_at: null })
+        .in("id", ids)
+        .select("id")
+    );
+  } catch (error) {
+    if (!isMissingTaskColumnError(error)) {
+      throw error;
+    }
+
+    await runQuery(
+      admin
+        .from("tasks")
+        .delete()
+        .in("id", ids)
+        .select("id")
+    );
+  }
+}
+
+export async function emptyTaskTrash() {
+  const admin = getSupabaseAdminClient();
+  await runQuery(
+    admin
+      .from("tasks")
+      .delete()
+      .not("deleted_at", "is", null)
+      .select("id")
+  );
 }

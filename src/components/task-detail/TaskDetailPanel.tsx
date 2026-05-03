@@ -46,6 +46,11 @@ export function TaskDetailPanel() {
     updateTaskOptimistic,
     addSubtaskOptimistic,
     spaces,
+    setSpaces,
+    setActiveView,
+    setFilter,
+    selectProject,
+    selectSpace,
   } = useAppStore();
   const [task, setTask] = useState<TaskDetailTask | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -65,6 +70,7 @@ export function TaskDetailPanel() {
   const [panelWidth, setPanelWidth] = useState(880);
   const [fullWidth, setFullWidth] = useState(false);
   const [isCommentComposing, setIsCommentComposing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const resizeStateRef = useRef<
@@ -175,7 +181,13 @@ export function TaskDetailPanel() {
     if (!task) return;
 
     const optimisticPatch = { ...patch } as Partial<TaskDetailTask>;
-    if ("assigneeId" in patch) {
+    if ("assigneeIds" in patch) {
+      const assignees = users.filter((user) => patch.assigneeIds?.includes(user.id));
+      optimisticPatch.assigneeIds = assignees.map((user) => user.id);
+      optimisticPatch.assignees = assignees;
+      optimisticPatch.assignee = assignees[0] ?? null;
+      optimisticPatch.assigneeId = assignees[0]?.id ?? null;
+    } else if ("assigneeId" in patch) {
       optimisticPatch.assignee = users.find((user) => user.id === patch.assigneeId) ?? null;
     }
 
@@ -210,7 +222,15 @@ export function TaskDetailPanel() {
 
   async function saveDescription() {
     if (!task) return;
+    if (description === (task.description ?? "")) return;
     await patchTask({ description });
+  }
+
+  async function reloadWorkspace() {
+    const response = await fetch("/api/spaces");
+    if (!response.ok) return;
+    const nextSpaces = await response.json();
+    setSpaces(nextSpaces);
   }
 
   async function addSubtask() {
@@ -274,17 +294,88 @@ export function TaskDetailPanel() {
   async function deleteCurrentTask() {
     if (!task) return;
 
-    const confirmed = window.confirm(`Task "${task.title}" wirklich loeschen?`);
-    if (!confirmed) return;
+    setActionError(null);
+    const previousTask = task;
+    const deletedAt = new Date().toISOString();
+
+    updateTaskOptimistic(task.id, { archivedAt: null, deletedAt });
+    setTask((prev) => (prev ? { ...prev, archivedAt: null, deletedAt } : prev));
+    setActiveView("table");
+    selectProject(null);
+    selectSpace(null);
+    setFilter("status", []);
+    setFilter("assigneeId", []);
+    setFilter("createdById", []);
+    setFilter("search", "");
+    setFilter("lifecycle", "deleted");
+    closeTask();
 
     const response = await fetch(`/api/tasks/${task.id}`, {
-      method: "DELETE",
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        archivedAt: null,
+        deletedAt,
+      }),
+    });
+
+    if (!response.ok) {
+      let message = "Task konnte nicht in den Papierkorb verschoben werden.";
+      try {
+        const payload = (await response.json()) as { error?: string };
+        if (payload.error) {
+          message = payload.error;
+        }
+      } catch {
+        // ignore json parse failures
+      }
+      updateTaskOptimistic(previousTask.id, {
+        archivedAt: previousTask.archivedAt,
+        deletedAt: previousTask.deletedAt,
+      });
+      setTask(previousTask);
+      setActionError(message);
+      return;
+    }
+
+    await reloadWorkspace();
+  }
+
+  async function toggleArchiveTask() {
+    if (!task) return;
+
+    const response = await fetch(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        archivedAt: task.archivedAt ? null : new Date().toISOString(),
+        deletedAt: null,
+      }),
     });
 
     if (!response.ok) return;
 
-    useAppStore.getState().deleteTaskOptimistic(task.id);
-    closeTask();
+    const updated = await response.json();
+    setTask((prev) => (prev ? { ...prev, ...updated } : prev));
+    updateTaskOptimistic(task.id, updated);
+    await reloadWorkspace();
+  }
+
+  async function restoreTask() {
+    if (!task) return;
+
+    const response = await fetch(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archivedAt: null, deletedAt: null }),
+    });
+
+    if (!response.ok) return;
+
+    const updated = await response.json();
+    setTask((prev) => (prev ? { ...prev, ...updated } : prev));
+    updateTaskOptimistic(task.id, updated);
+    await reloadWorkspace();
   }
 
   async function addDocument(input: { title: string; url: string; documentType: TaskDocument["documentType"] }) {
@@ -521,8 +612,9 @@ export function TaskDetailPanel() {
           type="button"
           aria-label="Panelbreite anpassen"
           onPointerDown={startWidthResizing}
-          className="absolute left-0 top-0 z-10 h-full w-3 -translate-x-1/2 cursor-col-resize"
+          className="absolute left-0 top-0 z-50 h-full w-5 -translate-x-1/2 cursor-col-resize"
         />
+        <div className="pointer-events-none absolute left-0 top-1/2 z-40 hidden h-24 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-300/80 sm:block" />
         {!task ? (
           <div className="flex flex-1 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-[#00B050]" />
@@ -601,8 +693,8 @@ export function TaskDetailPanel() {
                     label="Assignee"
                     value={
                       <AssigneeSelector
-                        assigneeId={task.assigneeId}
-                        onChange={(assigneeId) => patchTask({ assigneeId })}
+                        assigneeIds={task.assigneeIds}
+                        onChange={(assigneeIds) => patchTask({ assigneeIds })}
                       />
                     }
                   />
@@ -683,14 +775,39 @@ export function TaskDetailPanel() {
                 </div>
 
                 <div className="mt-3 flex justify-end">
+                  {task.deletedAt ? (
+                    <button
+                      onClick={restoreTask}
+                      className="mr-2 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+                    >
+                      Wiederherstellen
+                    </button>
+                  ) : (
+                    <button
+                      onClick={toggleArchiveTask}
+                      className="mr-2 inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100"
+                    >
+                      {task.archivedAt ? "Aus Archiv holen" : "Archivieren"}
+                    </button>
+                  )}
                   <button
-                    onClick={deleteCurrentTask}
-                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void deleteCurrentTask();
+                    }}
+                    disabled={Boolean(task.deletedAt)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Trash2 className="h-4 w-4" />
-                    Task loeschen
+                    {task.deletedAt ? "Im Papierkorb" : "In Papierkorb"}
                   </button>
                 </div>
+                {actionError ? (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {actionError}
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex items-center gap-2 border-t border-gray-100 px-7 py-3 text-sm text-gray-500">
@@ -752,15 +869,31 @@ export function TaskDetailPanel() {
 
                 <label className="mb-2 block text-sm font-semibold text-gray-600">Action Items:</label>
 
-                <textarea
-                  ref={descriptionRef}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  onBlur={saveDescription}
-                  placeholder="Describe the task, scope, stakeholders, and next action items..."
-                  style={{ height: actionItemsHeight }}
-                  className="w-full overflow-y-auto resize-none bg-transparent text-[1.02rem] leading-8 text-gray-800 focus:outline-none"
-                />
+                <div className="rounded-2xl border border-gray-200 bg-slate-50/50 p-3">
+                  <textarea
+                    ref={descriptionRef}
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        event.preventDefault();
+                        void saveDescription();
+                      }
+                    }}
+                    placeholder="Describe the task, scope, stakeholders, and next action items..."
+                    style={{ height: actionItemsHeight }}
+                    className="w-full overflow-y-auto resize-none bg-transparent text-[1.02rem] leading-8 text-gray-800 focus:outline-none"
+                  />
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void saveDescription()}
+                      className="rounded-lg bg-[#00B050] px-3 py-2 text-sm font-medium text-white hover:bg-[#00963f]"
+                    >
+                      Action Items speichern
+                    </button>
+                  </div>
+                </div>
 
                 <div className="mt-2 flex justify-center">
                   <button
@@ -1424,15 +1557,15 @@ function StatusSelector({ status, onChange }: { status: string; onChange: (statu
 }
 
 function AssigneeSelector({
-  assigneeId,
+  assigneeIds,
   onChange,
 }: {
-  assigneeId: string | null;
-  onChange: (id: string | null) => void;
+  assigneeIds: string[];
+  onChange: (ids: string[]) => void;
 }) {
   const { users } = useAppStore();
   const [open, setOpen] = useState(false);
-  const assignee = users.find((user) => user.id === assigneeId) ?? null;
+  const assignees = users.filter((user) => assigneeIds.includes(user.id));
 
   return (
     <div className="relative">
@@ -1440,14 +1573,18 @@ function AssigneeSelector({
         onClick={() => setOpen((current) => !current)}
         className="flex min-h-[40px] w-full items-center gap-2 rounded-xl border border-transparent bg-white/70 px-1 text-left text-sm hover:text-[#00B050]"
       >
-        {assignee ? (
+        {assignees.length > 0 ? (
           <>
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="text-[10px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
-                {getInitials(assignee.name)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-gray-700">{assignee.name}</span>
+            <div className="flex -space-x-2">
+              {assignees.slice(0, 3).map((assignee) => (
+                <Avatar key={assignee.id} className="h-7 w-7 border border-white">
+                  <AvatarFallback className="text-[10px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
+                    {getInitials(assignee.name)}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+            </div>
+            <span className="text-gray-700">{assignees.map((assignee) => assignee.name).join(", ")}</span>
           </>
         ) : (
           <span className="text-gray-400">Empty</span>
@@ -1457,14 +1594,18 @@ function AssigneeSelector({
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full z-20 mt-2 min-w-[220px] rounded-2xl border border-gray-200 bg-white py-1 shadow-xl">
-            <AssigneeOption label="Empty" onClick={() => { onChange(null); setOpen(false); }} />
+            <AssigneeOption label="Empty" onClick={() => { onChange([]); setOpen(false); }} />
             {users.map((user) => (
               <AssigneeOption
                 key={user.id}
                 user={user}
+                active={assigneeIds.includes(user.id)}
                 onClick={() => {
-                  onChange(user.id);
-                  setOpen(false);
+                  onChange(
+                    assigneeIds.includes(user.id)
+                      ? assigneeIds.filter((id) => id !== user.id)
+                      : [...assigneeIds, user.id]
+                  );
                 }}
               />
             ))}
@@ -1478,14 +1619,16 @@ function AssigneeSelector({
 function AssigneeOption({
   user,
   label,
+  active,
   onClick,
 }: {
   user?: { name: string; color: string };
   label?: string;
+  active?: boolean;
   onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50">
+    <button onClick={onClick} className={cn("flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50", active && "bg-green-50")}>
       {user ? (
         <>
           <Avatar className="h-6 w-6">

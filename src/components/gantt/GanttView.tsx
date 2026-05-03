@@ -4,11 +4,14 @@ import React, { useMemo, useState } from "react";
 import { addDays, eachDayOfInterval, endOfMonth, format, isSameDay, startOfMonth } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { cn, STATUS_CONFIG } from "@/lib/utils";
+import { cn, STATUS_CONFIG, matchesTaskLifecycle, getTaskDateRange } from "@/lib/utils";
 import type { Task } from "@/types";
 
 type TimelineTask = Task & {
   location: string;
+  projectId: string;
+  projectName: string;
+  projectColor: string;
 };
 
 const HOURS_PER_DAY = 8;
@@ -25,11 +28,11 @@ export function GanttView() {
   const timelineTasks = useMemo(() => {
     const items: TimelineTask[] = [];
 
-    function collect(tasks: Task[], location: string) {
+    function collect(tasks: Task[], location: string, projectId: string, projectName: string, projectColor: string) {
       for (const task of tasks) {
-        items.push({ ...task, location });
+        items.push({ ...task, location, projectId, projectName, projectColor });
         if (task.subtasks.length > 0) {
-          collect(task.subtasks, location);
+          collect(task.subtasks, location, projectId, projectName, projectColor);
         }
       }
     }
@@ -39,7 +42,13 @@ export function GanttView() {
       for (const folder of space.folders) {
         for (const project of folder.projects) {
           if (selectedProjectId && project.id !== selectedProjectId) continue;
-          collect(project.tasks, `${space.name} / ${folder.name} / ${project.name}`);
+          collect(
+            project.tasks,
+            `${space.name} / ${folder.name} / ${project.name}`,
+            project.id,
+            project.name,
+            project.color
+          );
         }
       }
     }
@@ -48,33 +57,62 @@ export function GanttView() {
       .filter((task) => task.startDate || task.dueDate)
       .filter((task) => {
         if (filters.status.length && !filters.status.includes(task.status)) return false;
-        if (filters.assigneeId.length && !filters.assigneeId.includes(task.assigneeId ?? "")) return false;
+        if (filters.assigneeId.length && !task.assigneeIds.some((id) => filters.assigneeId.includes(id))) return false;
         if (filters.createdById.length && !filters.createdById.includes(task.createdById ?? "")) return false;
         if (filters.search && !task.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
-        if (assigneeFilter !== "all" && task.assigneeId !== assigneeFilter) return false;
+        if (assigneeFilter !== "all" && !task.assigneeIds.includes(assigneeFilter)) return false;
+        if (!matchesTaskLifecycle(task, filters.lifecycle)) return false;
         return true;
       })
       .sort((a, b) => {
-        const left = new Date(a.startDate ?? a.dueDate ?? a.createdAt).getTime();
-        const right = new Date(b.startDate ?? b.dueDate ?? b.createdAt).getTime();
+        const left = getTaskDateRange(a).start?.getTime() ?? 0;
+        const right = getTaskDateRange(b).start?.getTime() ?? 0;
         return left - right;
       });
   }, [assigneeFilter, filters, selectedProjectId, selectedSpaceId, spaces]);
 
   const summary = useMemo(() => {
     const total = timelineTasks.length;
-    const assigned = timelineTasks.filter((task) => task.assignee).length;
+    const assigned = timelineTasks.filter((task) => task.assignees.length > 0).length;
     const withRange = timelineTasks.filter((task) => task.startDate && task.dueDate).length;
     return { total, assigned, withRange };
   }, [timelineTasks]);
 
+  const projectTimelines = useMemo(() => {
+    const byProject = new Map<string, { id: string; name: string; color: string; start: Date; end: Date; tasks: number }>();
+
+    for (const task of timelineTasks) {
+      const { start, end } = getTaskDateRange(task);
+      if (!start || !end) continue;
+      const existing = byProject.get(task.projectId);
+
+      if (!existing) {
+        byProject.set(task.projectId, {
+          id: task.projectId,
+          name: task.projectName,
+          color: task.projectColor,
+          start,
+          end,
+          tasks: 1,
+        });
+        continue;
+      }
+
+      existing.start = existing.start < start ? existing.start : start;
+      existing.end = existing.end > end ? existing.end : end;
+      existing.tasks += 1;
+    }
+
+    return Array.from(byProject.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [timelineTasks]);
+
   const workloadByUser = users
     .map((user) => {
-      const tasks = timelineTasks.filter((task) => task.assigneeId === user.id);
+      const tasks = timelineTasks.filter((task) => task.assigneeIds.includes(user.id));
       const totalHours = tasks.reduce((sum, task) => sum + (task.effort || 0), 0);
       const daysPlanned = tasks.reduce((sum, task) => {
-        const start = new Date(task.startDate ?? task.dueDate ?? task.createdAt);
-        const end = new Date(task.dueDate ?? task.startDate ?? task.createdAt);
+        const { start, end } = getTaskDateRange(task);
+        if (!start || !end) return sum;
         const visibleDays = days.filter((day) => day >= start && day <= end).length;
         return sum + Math.max(visibleDays, 1);
       }, 0);
@@ -189,10 +227,7 @@ export function GanttView() {
               )}
             </div>
 
-            <div
-              className="grid border-b border-gray-200 bg-white/90 backdrop-blur"
-              style={{ gridTemplateColumns: `320px repeat(${days.length}, minmax(42px, 1fr))` }}
-            >
+            <div className="grid border-b border-gray-200 bg-white/90 backdrop-blur" style={{ gridTemplateColumns: `320px repeat(${days.length}, minmax(42px, 1fr))` }}>
               <div className="sticky left-0 z-20 border-r border-gray-200 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Task / Timeline
               </div>
@@ -210,9 +245,60 @@ export function GanttView() {
               ))}
             </div>
 
+            {projectTimelines.length > 0 ? (
+              <div>
+                {projectTimelines.map((project) => {
+                  const visibleDayIndexes = days
+                    .map((day, index) => (day >= project.start && day <= project.end ? index : -1))
+                    .filter((index) => index >= 0);
+                  const spansCurrentMonth = visibleDayIndexes.length > 0;
+                  const startIndex = spansCurrentMonth ? visibleDayIndexes[0] : -1;
+                  const endIndex = spansCurrentMonth ? visibleDayIndexes[visibleDayIndexes.length - 1] : -1;
+
+                  return (
+                    <div
+                      key={project.id}
+                      className="grid border-b border-dashed border-slate-200 bg-slate-50/70"
+                      style={{ gridTemplateColumns: `320px repeat(${days.length}, minmax(42px, 1fr))` }}
+                    >
+                      <div className="sticky left-0 z-10 flex items-center gap-3 border-r border-gray-200 bg-slate-50/95 px-4 py-2 text-left">
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: project.color }} />
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{project.name}</div>
+                          <div className="text-xs text-slate-500">{project.tasks} datierte Tasks</div>
+                        </div>
+                      </div>
+
+                      {days.map((day, index) => {
+                        const inRange = day >= project.start && day <= project.end;
+                        const isStart = isSameDay(day, project.start);
+                        const isEnd = isSameDay(day, project.end);
+
+                        return (
+                          <div key={day.toISOString()} className="relative border-r border-gray-100 px-1 py-2">
+                            {spansCurrentMonth && inRange ? (
+                              <div
+                                className={cn("h-4 rounded-sm opacity-70", isStart && "rounded-l-xl", isEnd && "rounded-r-xl")}
+                                style={{
+                                  backgroundColor: project.color,
+                                  marginLeft: index === startIndex ? 0 : -4,
+                                  marginRight: index === endIndex ? 0 : -4,
+                                }}
+                                title={`${project.name}: ${format(project.start, "dd.MM.yyyy")} - ${format(project.end, "dd.MM.yyyy")}`}
+                              />
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
             {timelineTasks.map((task) => {
-              const start = new Date(task.startDate ?? task.dueDate ?? task.createdAt);
-              const end = new Date(task.dueDate ?? task.startDate ?? task.createdAt);
+              const { start, end } = getTaskDateRange(task);
+              if (!start || !end) return null;
               const visibleDayIndexes = days
                 .map((day, index) => (day >= start && day <= end ? index : -1))
                 .filter((index) => index >= 0);
@@ -233,7 +319,7 @@ export function GanttView() {
                   >
                     <span className="text-sm font-medium text-slate-900">{task.title}</span>
                     <span className="mt-1 text-xs text-slate-500">
-                      {task.assignee?.name ?? "Nicht zugewiesen"} · {task.location}
+                      {task.assignees.length > 0 ? task.assignees.map((assignee) => assignee.name).join(", ") : "Nicht zugewiesen"} · {task.location}
                     </span>
                     <span className="mt-1 text-xs text-slate-400">
                       {format(start, "dd.MM.yyyy")} bis {format(end, "dd.MM.yyyy")}

@@ -131,7 +131,12 @@ export function Toolbar() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setFilter("status", []); setFilter("assigneeId", []); setFilter("createdById", []); }}
+                  onClick={() => {
+                    setFilter("status", []);
+                    setFilter("assigneeId", []);
+                    setFilter("createdById", []);
+                    setFilter("lifecycle", "active");
+                  }}
                   className="text-xs text-gray-400 hover:text-red-500"
                 >
                   Clear all filters

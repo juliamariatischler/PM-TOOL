@@ -106,7 +106,7 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
             <EmptyWorkspace onCreateSpace={() => setCreateSpaceOpen(true)} />
           ) : (
             <>
-              {activeView === "table" && <TableView />}
+              {activeView === "table" && <TableView currentUserId={currentUser.id} />}
               {activeView === "board" && <BoardView />}
               {activeView === "workload" && <WorkloadView />}
               {activeView === "gantt" && <GanttView />}

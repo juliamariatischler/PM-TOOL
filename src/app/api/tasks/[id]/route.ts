@@ -22,7 +22,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: Record<string, unknown> = {};
   if (body.title !== undefined) data.title = body.title;
   if (body.status !== undefined) data.status = body.status;
+  if (body.projectId !== undefined) data.projectId = body.projectId;
   if (body.assigneeId !== undefined) data.assigneeId = body.assigneeId || null;
+  if (body.assigneeIds !== undefined) data.assigneeIds = body.assigneeIds;
   if (body.startDate !== undefined) data.startDate = body.startDate || null;
   if (body.dueDate !== undefined) data.dueDate = body.dueDate || null;
   if (body.description !== undefined) data.description = body.description;
@@ -33,16 +35,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.plannedCost !== undefined) data.plannedCost = body.plannedCost;
   if (body.position !== undefined) data.position = body.position;
   if (body.parentId !== undefined) data.parentId = body.parentId || null;
+  if (body.archivedAt !== undefined) data.archivedAt = body.archivedAt || null;
+  if (body.deletedAt !== undefined) data.deletedAt = body.deletedAt || null;
 
   const task = await updateTask(id, data);
   return NextResponse.json(task);
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireApiSessionUser())) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  try {
+    if (!(await requireApiSessionUser())) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const { id } = await params;
+    await deleteTask(id);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to delete task" },
+      { status: 500 }
+    );
   }
-  const { id } = await params;
-  await deleteTask(id);
-  return NextResponse.json({ ok: true });
 }

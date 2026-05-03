@@ -12,6 +12,7 @@ interface AppState {
   selectedTaskId: string | null;
   taskDetailOpen: boolean;
   sidebarCollapsed: boolean;
+  sidebarWidth: number;
   filters: TaskFilters;
   expandedTaskIds: Set<string>;
   commandOpen: boolean;
@@ -26,6 +27,7 @@ interface AppState {
   openTask: (id: string) => void;
   closeTask: () => void;
   toggleSidebar: () => void;
+  setSidebarWidth: (width: number) => void;
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
   toggleTaskExpand: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
@@ -47,7 +49,8 @@ export const useAppStore = create<AppState>((set) => ({
   selectedTaskId: null,
   taskDetailOpen: false,
   sidebarCollapsed: false,
-  filters: { status: [], assigneeId: [], createdById: [], search: "" },
+  sidebarWidth: 288,
+  filters: { status: [], assigneeId: [], createdById: [], search: "", lifecycle: "active" },
   expandedTaskIds: new Set(),
   commandOpen: false,
 
@@ -60,6 +63,7 @@ export const useAppStore = create<AppState>((set) => ({
   openTask: (id) => set({ selectedTaskId: id, taskDetailOpen: true }),
   closeTask: () => set({ taskDetailOpen: false, selectedTaskId: null }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+  setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
   setFilter: (key, value) =>
     set((s) => ({ filters: { ...s.filters, [key]: value } })),
   toggleTaskExpand: (id) =>

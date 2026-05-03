@@ -60,6 +60,9 @@ export interface InboxItem {
   commentId: string;
   taskId: string;
   taskTitle: string;
+  taskStatus: string;
+  taskArchivedAt: string | null;
+  taskDeletedAt: string | null;
   projectName: string;
   folderName: string;
   spaceName: string;
@@ -76,6 +79,8 @@ export interface Task {
   createdById: string | null;
   assigneeId: string | null;
   assignee: User | null;
+  assigneeIds: string[];
+  assignees: User[];
   startDate: string | null;
   dueDate: string | null;
   description: string | null;
@@ -88,6 +93,8 @@ export interface Task {
   actualTimeMinutes: number;
   timerStartedAt: string | null;
   plannedCost: number;
+  archivedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -131,4 +138,5 @@ export interface TaskFilters {
   assigneeId: string[];
   createdById: string[];
   search: string;
+  lifecycle: "active" | "archived" | "deleted" | "all";
 }

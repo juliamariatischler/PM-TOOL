@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { Mail, MessageSquare, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { formatDate, getInitials } from "@/lib/utils";
@@ -8,6 +9,19 @@ import { cn } from "@/lib/utils";
 
 export function InboxView() {
   const { inboxItems, openTask, setActiveView, setInboxItems } = useAppStore();
+  const [filter, setFilter] = useState<"all" | "unread" | "completed" | "archived">("all");
+
+  const filteredItems = useMemo(
+    () =>
+      inboxItems.filter((item) => {
+        if (item.taskDeletedAt) return false;
+        if (filter === "unread") return !item.readAt;
+        if (filter === "completed") return item.taskStatus === "Completed";
+        if (filter === "archived") return Boolean(item.taskArchivedAt);
+        return true;
+      }),
+    [filter, inboxItems]
+  );
 
   async function handleOpen(itemId: string, taskId: string) {
     const response = await fetch("/api/inbox", {
@@ -57,8 +71,35 @@ export function InboxView() {
           </div>
         </div>
 
+        <div className="mb-5 flex flex-wrap gap-2">
+          {[
+            { id: "all", label: "Alle" },
+            { id: "unread", label: "Ungelesen" },
+            { id: "completed", label: "Erledigte Tasks" },
+            { id: "archived", label: "Archiviert" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setFilter(item.id as typeof filter)}
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                filter === item.id
+                  ? "border-[#00B050] bg-[#00B050]/10 text-[#0e6d36]"
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-3">
-          {inboxItems.map((item) => (
+          {filteredItems.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+              Keine Eintraege fuer diesen Filter.
+            </div>
+          ) : (
+            filteredItems.map((item) => (
             <button
               key={item.id}
               onClick={() => handleOpen(item.id, item.taskId)}
@@ -107,7 +148,8 @@ export function InboxView() {
                 </div>
               </div>
             </button>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

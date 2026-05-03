@@ -20,6 +20,7 @@ export async function POST(req: Request) {
     creatorId: user.id,
     status: body.status,
     assigneeId: body.assigneeId,
+    assigneeIds: Array.isArray(body.assigneeIds) ? body.assigneeIds : undefined,
     parentId: body.parentId,
     startDate: body.startDate,
     dueDate: body.dueDate,

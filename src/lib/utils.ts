@@ -16,6 +16,16 @@ export const STATUS_CONFIG: Record<string, { label: string; color: string; bg: s
 
 export const STATUSES = Object.keys(STATUS_CONFIG);
 
+export function matchesTaskLifecycle(
+  task: { archivedAt?: string | null; deletedAt?: string | null },
+  lifecycle: "active" | "archived" | "deleted" | "all"
+) {
+  if (lifecycle === "all") return true;
+  if (lifecycle === "deleted") return Boolean(task.deletedAt);
+  if (lifecycle === "archived") return !task.deletedAt && Boolean(task.archivedAt);
+  return !task.deletedAt && !task.archivedAt;
+}
+
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
@@ -34,4 +44,27 @@ export function getInitials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+export function parseCalendarDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, year, month, day] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+export function getTaskDateRange(task: {
+  startDate?: string | null;
+  dueDate?: string | null;
+  createdAt: string;
+}) {
+  const start = parseCalendarDate(task.startDate) ?? parseCalendarDate(task.dueDate) ?? parseCalendarDate(task.createdAt);
+  const end = parseCalendarDate(task.dueDate) ?? parseCalendarDate(task.startDate) ?? parseCalendarDate(task.createdAt);
+  return { start, end };
 }

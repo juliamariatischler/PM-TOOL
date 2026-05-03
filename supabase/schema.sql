@@ -65,6 +65,8 @@ create table if not exists public.tasks (
   actual_time_minutes integer not null default 0,
   timer_started_at timestamptz,
   planned_cost double precision not null default 0,
+  archived_at timestamptz,
+  deleted_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -119,6 +121,13 @@ create table if not exists public.task_links (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.task_assignees (
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  user_id uuid not null references public.users(id) on delete cascade,
+  created_at timestamptz not null default timezone('utc', now()),
+  primary key (task_id, user_id)
+);
+
 create table if not exists public.microsoft_connections (
   user_id uuid primary key references public.users(id) on delete cascade,
   email text,
@@ -143,6 +152,7 @@ create index if not exists task_approvals_task_id_idx on public.task_approvals(t
 create index if not exists task_approvals_approver_user_id_idx on public.task_approvals(approver_user_id);
 create index if not exists task_links_task_id_idx on public.task_links(task_id);
 create index if not exists task_links_linked_task_id_idx on public.task_links(linked_task_id);
+create index if not exists task_assignees_user_id_idx on public.task_assignees(user_id);
 
 drop trigger if exists spaces_set_updated_at on public.spaces;
 create trigger spaces_set_updated_at
@@ -184,6 +194,7 @@ alter table public.task_comment_mentions enable row level security;
 alter table public.task_documents enable row level security;
 alter table public.task_approvals enable row level security;
 alter table public.task_links enable row level security;
+alter table public.task_assignees enable row level security;
 alter table public.microsoft_connections enable row level security;
 
 drop policy if exists "users can read own profile" on public.users;
@@ -338,6 +349,21 @@ using (true);
 drop policy if exists "authenticated can write task links" on public.task_links;
 create policy "authenticated can write task links"
 on public.task_links
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "authenticated can read task assignees" on public.task_assignees;
+create policy "authenticated can read task assignees"
+on public.task_assignees
+for select
+to authenticated
+using (true);
+
+drop policy if exists "authenticated can write task assignees" on public.task_assignees;
+create policy "authenticated can write task assignees"
+on public.task_assignees
 for all
 to authenticated
 using (true)

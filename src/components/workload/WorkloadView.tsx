@@ -1,7 +1,7 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { addDays, format, startOfWeek, eachDayOfInterval, isSameDay, isWeekend } from "date-fns";
-import { cn, getInitials, STATUS_CONFIG } from "@/lib/utils";
+import { cn, getInitials, STATUS_CONFIG, getTaskDateRange } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -38,10 +38,10 @@ export function WorkloadView() {
 
   function getTasksForUserOnDay(userId: string, day: Date): Task[] {
     return allTasks.filter(t => {
-      if (t.assigneeId !== userId) return false;
+      if (!t.assigneeIds.includes(userId)) return false;
       if (!t.startDate && !t.dueDate) return false;
-      const start = t.startDate ? new Date(t.startDate) : new Date(t.dueDate!);
-      const end = t.dueDate ? new Date(t.dueDate) : new Date(t.startDate!);
+      const { start, end } = getTaskDateRange(t);
+      if (!start || !end) return false;
       return day >= start && day <= end;
     });
   }
@@ -129,7 +129,7 @@ export function WorkloadView() {
           <tbody>
             {filteredUsers.map(user => {
               const isExpanded = expandedUsers.has(user.id);
-              const userTasks = allTasks.filter(t => t.assigneeId === user.id);
+              const userTasks = allTasks.filter(t => t.assigneeIds.includes(user.id));
 
               return (
                 <React.Fragment key={user.id}>
@@ -192,8 +192,7 @@ export function WorkloadView() {
                         </div>
                       </td>
                       {days.map(day => {
-                        const start = task.startDate ? new Date(task.startDate) : null;
-                        const end = task.dueDate ? new Date(task.dueDate) : null;
+                        const { start, end } = getTaskDateRange(task);
                         const inRange = start && end && day >= start && day <= end;
 
                         return (
