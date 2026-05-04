@@ -2,11 +2,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Copy,
-  Calendar,
   CheckSquare,
   ChevronDown,
   Clock3,
-  DollarSign,
   FileSpreadsheet,
   FileText,
   Link2,
@@ -18,9 +16,9 @@ import {
   Paperclip,
   Play,
   Presentation,
+  Square,
   Trash2,
   Send,
-  Tag,
   ExternalLink,
   X,
 } from "lucide-react";
@@ -77,9 +75,10 @@ export function TaskDetailPanel() {
   const [isCommentComposing, setIsCommentComposing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [copiedState, setCopiedState] = useState<"link" | "id" | null>(null);
+  const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
   const resizeStateRef = useRef<
     | { mode: "height"; startY: number; startHeight: number }
     | { mode: "width"; startX: number; startWidth: number }
@@ -99,7 +98,6 @@ export function TaskDetailPanel() {
         setDescriptionDirty(false);
         setDescriptionError(null);
         setMenuOpen(false);
-        setCopiedState(null);
       });
   }, [selectedTaskId, taskDetailOpen]);
 
@@ -337,6 +335,31 @@ export function TaskDetailPanel() {
   async function submitCommentFromKeyboard() {
     if (!comment.trim()) return;
     await addComment();
+  }
+
+  function insertMention(user: User) {
+    const textarea = commentRef.current;
+    const mentionToken = `@${getUserMentionInsertToken(user)} `;
+
+    setComment((current) => {
+      if (!textarea) {
+        return `${current}${current && !current.endsWith(" ") ? " " : ""}${mentionToken}`;
+      }
+
+      const selectionStart = textarea.selectionStart ?? current.length;
+      const selectionEnd = textarea.selectionEnd ?? current.length;
+      const nextValue = `${current.slice(0, selectionStart)}${mentionToken}${current.slice(selectionEnd)}`;
+
+      window.requestAnimationFrame(() => {
+        textarea.focus();
+        const cursor = selectionStart + mentionToken.length;
+        textarea.setSelectionRange(cursor, cursor);
+      });
+
+      return nextValue;
+    });
+
+    setMentionMenuOpen(false);
   }
 
   async function deleteCurrentTask() {
@@ -615,20 +638,19 @@ export function TaskDetailPanel() {
     task?.createdById
       ? users.find((user) => user.id === task.createdById) ?? (currentUser?.id === task.createdById ? currentUser : null)
       : null;
-  const approvalsSummary =
-    (task?.approvals ?? []).length > 0
-      ? `${(task?.approvals ?? []).filter((approval) => approval.status === "pending").length} offen`
-      : "Keine";
-  const dependenciesSummary =
-    (task?.links ?? []).length > 0
-      ? `${(task?.links ?? []).length} Link${(task?.links ?? []).length === 1 ? "" : "s"}`
-      : "Keine";
   const availableDependencyTasks = spaces.flatMap((space) =>
     space.folders.flatMap((folder) =>
       folder.projects.flatMap((project) => project.tasks.flatMap((candidate) => flattenTaskTree(candidate)))
     )
   ).filter((candidate) => candidate.id !== task?.id);
-
+  const taskYear = task ? new Date(task.createdAt).getFullYear() : new Date().getFullYear();
+  const completedSubtasks = task?.subtasks.filter((subtask) => subtask.status === "Completed").length ?? 0;
+  const commentCount = activityItems.length;
+  const documentCount = (task?.documents ?? []).length;
+  const taskDateLabel =
+    task?.startDate || task?.dueDate
+      ? [task.startDate ? formatDate(task.startDate) : null, task.dueDate ? formatDate(task.dueDate) : null].filter(Boolean).join(" - ")
+      : "Datum festlegen";
   function getTaskPermalink(taskId: string) {
     if (typeof window === "undefined") return `?task=${taskId}`;
     const url = new URL(window.location.href);
@@ -642,10 +664,6 @@ export function TaskDetailPanel() {
 
     try {
       await navigator.clipboard.writeText(value);
-      setCopiedState(kind);
-      window.setTimeout(() => {
-        setCopiedState((current) => (current === kind ? null : current));
-      }, 1800);
     } catch {
       setActionError(kind === "link" ? "Permalink konnte nicht kopiert werden." : "Task-ID konnte nicht kopiert werden.");
     }
@@ -693,7 +711,7 @@ export function TaskDetailPanel() {
       <div className="fixed inset-0 z-40 bg-black/20" onClick={closeTask} />
 
       <div
-        className="fixed right-0 top-0 z-50 flex h-full flex-col border-l border-gray-200 bg-white shadow-2xl"
+        className="fixed right-0 top-0 z-50 flex h-full flex-col border-l border-[#263451] bg-[#161f34] shadow-2xl"
         style={{ width: fullWidth ? "100vw" : `${panelWidth}px`, maxWidth: "100vw" }}
       >
         <button
@@ -702,17 +720,20 @@ export function TaskDetailPanel() {
           onPointerDown={startWidthResizing}
           className="absolute left-0 top-0 z-50 h-full w-5 -translate-x-1/2 cursor-col-resize"
         />
-        <div className="pointer-events-none absolute left-0 top-1/2 z-40 hidden h-24 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-300/80 sm:block" />
+        <div className="pointer-events-none absolute left-0 top-1/2 z-40 hidden h-24 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#44506c]/90 sm:block" />
         {!task ? (
           <div className="flex flex-1 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-[#00B050]" />
           </div>
         ) : (
           <>
-            <div className="border-b border-gray-100 overflow-y-auto" style={{ height: topSectionHeight }}>
-              <div className="px-4 pb-1.5 pt-2.5">
+            <div className="overflow-y-auto border-b border-[#263451]" style={{ height: topSectionHeight }}>
+              <div className="px-7 pb-2 pt-6">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
+                    <div className="text-sm text-[#90a0c4]">
+                      {task.archivedAt ? "Archiviert" : task.deletedAt ? "Im Papierkorb" : "Task"} · {taskYear}
+                    </div>
                     {editingTitle ? (
                       <input
                         ref={titleRef}
@@ -724,65 +745,59 @@ export function TaskDetailPanel() {
                             saveTitle();
                           }
                         }}
-                        className="w-full border-b-2 border-[#00B050] bg-transparent text-[1.75rem] font-semibold leading-tight text-gray-900 focus:outline-none"
+                        className="mt-2 w-full border-b border-[#00B050] bg-transparent pb-1 text-[2rem] font-semibold leading-tight text-white focus:outline-none"
                       />
                     ) : (
                       <h2
                         onClick={() => setEditingTitle(true)}
-                        className="cursor-text truncate text-[1.75rem] font-semibold leading-tight text-gray-900"
+                        className="mt-2 cursor-text truncate text-[2rem] font-semibold leading-tight text-white"
                       >
                         {task.title}
                       </h2>
                     )}
 
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-sm text-gray-600">
-                        {location || "No project context"}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-md border border-[#324160] bg-[#1a2742] px-2.5 py-1 text-sm text-[#c8d3eb]">
+                        {location || "Kein Projektkontext"}
                       </span>
-                      <span className="inline-flex items-center rounded-full bg-[#00B050] px-3 py-1 text-sm font-semibold text-white">
-                        {task.subtasks.length}
+                      <span className="inline-flex items-center rounded-md border border-[#324160] bg-[#1a2742] px-2.5 py-1 text-sm text-[#c8d3eb]">
+                        {completedSubtasks}/{task.subtasks.length} erledigt
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 text-gray-400">
+                  <div className="flex items-center gap-1.5 text-[#9aa7c3]">
                     <button
                       onClick={() => setFullWidth((current) => !current)}
-                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                      className="rounded-md p-2 hover:bg-[#1f2b45] hover:text-white"
                     >
                       {fullWidth ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                     </button>
                     <button
                       onClick={() => void copyTaskValue("link")}
-                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                      className="rounded-md p-2 hover:bg-[#1f2b45] hover:text-white"
                     >
                       <Link2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setLinkDialogOpen(true)}
-                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
-                    >
-                      <Tag className="h-4 w-4" />
                     </button>
                     <div className="relative">
                       <button
                         type="button"
                         onClick={() => setMenuOpen((current) => !current)}
-                        className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                        className="rounded-md p-2 hover:bg-[#1f2b45] hover:text-white"
                       >
                         <MoreHorizontal className="h-4 w-4" />
                       </button>
                       {menuOpen ? (
                         <>
                           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                          <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] rounded-xl border border-gray-200 bg-white py-1 shadow-xl">
+                          <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] rounded-xl border border-[#33415d] bg-[#1a2742] py-1 shadow-xl">
                             <button
                               type="button"
                               onClick={() => {
                                 setFullWidth((current) => !current);
                                 setMenuOpen(false);
                               }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#d4def5] hover:bg-[#223150]"
                             >
                               {fullWidth ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                               {fullWidth ? "Normale Breite" : "Vollbild"}
@@ -790,7 +805,7 @@ export function TaskDetailPanel() {
                             <button
                               type="button"
                               onClick={openTaskInNewTab}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#d4def5] hover:bg-[#223150]"
                             >
                               <ExternalLink className="h-4 w-4" />
                               In neuem Tab oeffnen
@@ -801,7 +816,7 @@ export function TaskDetailPanel() {
                                 void copyTaskValue("link");
                                 setMenuOpen(false);
                               }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#d4def5] hover:bg-[#223150]"
                             >
                               <Link2 className="h-4 w-4" />
                               Permalink kopieren
@@ -812,7 +827,7 @@ export function TaskDetailPanel() {
                                 void copyTaskValue("id");
                                 setMenuOpen(false);
                               }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#d4def5] hover:bg-[#223150]"
                             >
                               <Copy className="h-4 w-4" />
                               Task-ID kopieren
@@ -836,14 +851,14 @@ export function TaskDetailPanel() {
                     </div>
                     <button
                       onClick={closeTask}
-                      className="rounded-md p-2 hover:bg-gray-100 hover:text-gray-600"
+                      className="rounded-md p-2 hover:bg-[#1f2b45] hover:text-white"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-2 grid grid-cols-1 gap-1 md:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-5 grid grid-cols-1 gap-2 xl:grid-cols-[1.2fr_1.2fr_1.2fr_180px]">
                   <TaskMetaCard
                     label="Status"
                     value={
@@ -854,7 +869,7 @@ export function TaskDetailPanel() {
                     }
                   />
                   <TaskMetaCard
-                    label="Assignee"
+                    label="Verantwortliche(r)"
                     value={
                       <AssigneeSelector
                         assigneeIds={task.assigneeIds}
@@ -863,113 +878,63 @@ export function TaskDetailPanel() {
                     }
                   />
                   <TaskMetaCard
-                    label="Start"
+                    label="Datum"
                     value={
-                      <div className="flex items-center gap-1 text-[10px] leading-none text-gray-500">
-                        <Calendar className="h-3 w-3 text-gray-400" />
-                        <input
-                          type="date"
-                          value={task.startDate ? task.startDate.slice(0, 10) : ""}
-                          onChange={(event) => patchTask({ startDate: event.target.value || null })}
-                          className="h-5 w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
-                        />
-                      </div>
-                    }
-                  />
-                  <TaskMetaCard
-                    label="Ende"
-                    value={
-                      <div className="flex items-center gap-1 text-[10px] leading-none text-gray-500">
-                        <Calendar className="h-3 w-3 text-gray-400" />
-                        <input
-                          type="date"
-                          value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
-                          onChange={(event) => patchTask({ dueDate: event.target.value || null })}
-                          className="h-5 w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
-                        />
-                      </div>
-                    }
-                  />
-                  <TaskMetaCard
-                    label="Prioritaet"
-                    value={
-                      <select
-                        value={task.priority}
-                        onChange={(event) => patchTask({ priority: event.target.value })}
-                        className="h-5 w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
-                      >
-                        <option value="Critical">Critical</option>
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
-                      </select>
-                    }
-                  />
-                  <TaskMetaCard
-                    label="Aufwand / Kosten"
-                    value={
-                      <div className="space-y-0.5">
-                        <div className="grid grid-cols-2 gap-1">
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-white">{taskDateLabel}</div>
+                        <div className="grid grid-cols-2 gap-2">
                           <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={String(task.effort)}
-                            onChange={(event) => patchTask({ effort: Number(event.target.value || 0) })}
-                            className="h-6 w-full rounded-md border border-gray-200 bg-white px-2 py-0 text-[10px] leading-none text-gray-700 focus:outline-none"
+                            type="date"
+                            value={task.startDate ? task.startDate.slice(0, 10) : ""}
+                            onChange={(event) => patchTask({ startDate: event.target.value || null })}
+                            className="h-9 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-sm text-[#d4def5] focus:outline-none"
                           />
-                          <div className="flex h-6 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0">
-                            <DollarSign className="h-2.5 w-2.5 text-gray-400" />
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={String(task.plannedCost)}
-                              onChange={(event) => patchTask({ plannedCost: Number(event.target.value || 0) })}
-                              className="h-full w-full bg-transparent text-[10px] leading-none text-gray-700 focus:outline-none"
-                            />
-                          </div>
+                          <input
+                            type="date"
+                            value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
+                            onChange={(event) => patchTask({ dueDate: event.target.value || null })}
+                            className="h-9 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-sm text-[#d4def5] focus:outline-none"
+                          />
                         </div>
-                        <div className="text-[9px] leading-none text-gray-500">
-                          Tatsaechliche Zeit: <span className="font-semibold text-gray-700">{displayedActualTime}</span>
+                      </div>
+                    }
+                  />
+                  <TaskMetaCard
+                    label="Weitere"
+                    value={
+                      <div className="flex h-full flex-col justify-between gap-3">
+                        <div className="text-sm text-[#c8d3eb]">
+                          {completedSubtasks} von {task.subtasks.length} Schritte erledigt
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setMenuOpen((current) => !current)}
+                          className="inline-flex items-center justify-between rounded-md border border-[#33415d] bg-[#111a2c] px-3 py-2 text-sm text-[#d4def5] hover:bg-[#223150]"
+                        >
+                          Mehr Optionen
+                          <ChevronDown className="h-4 w-4" />
+                        </button>
                       </div>
                     }
                   />
                 </div>
 
-                <div className="mt-1.5 grid grid-cols-2 gap-1 xl:grid-cols-6">
+                <div className="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-4">
                   <CompactMetaCard
-                    label="Autor"
+                    label="Erstellt von"
                     value={taskCreator?.name ?? "Unbekannt"}
                   />
                   <CompactMetaCard
-                    label="Erstellt"
-                    value={formatDate(task.createdAt)}
+                    label="Faelligkeit"
+                    value={taskDateLabel}
                   />
                   <CompactMetaCard
-                    label="Task-ID"
-                    value={task.id.slice(0, 8)}
-                    actionLabel={copiedState === "id" ? "Kopiert" : "Kopieren"}
-                    onAction={() => void copyTaskValue("id")}
+                    label="Kommentare"
+                    value={`${commentCount}`}
                   />
                   <CompactMetaCard
-                    label="Permalink"
-                    value={copiedState === "link" ? "Kopiert" : "Link"}
-                    actionLabel="Oeffnen"
-                    onAction={openTaskInNewTab}
-                  />
-                  <CompactMetaCard
-                    label="Approvals"
-                    value={approvalsSummary}
-                    actionLabel="Neu"
-                    onAction={() => setApprovalDialogOpen(true)}
-                  />
-                  <CompactMetaCard
-                    label="Dependencies"
-                    value={dependenciesSummary}
-                    actionLabel="Neu"
-                    onAction={() => setLinkDialogOpen(true)}
+                    label="Dateien"
+                    value={`${documentCount}`}
                   />
                 </div>
 
@@ -977,14 +942,14 @@ export function TaskDetailPanel() {
                   {task.deletedAt ? (
                     <button
                       onClick={restoreTask}
-                      className="mr-2 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+                      className="mr-2 inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
                     >
                       Wiederherstellen
                     </button>
                   ) : (
                     <button
                       onClick={toggleArchiveTask}
-                      className="mr-2 inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100"
+                      className="mr-2 inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-100 hover:bg-amber-500/20"
                     >
                       {task.archivedAt ? "Aus Archiv holen" : "Archivieren"}
                     </button>
@@ -996,56 +961,56 @@ export function TaskDetailPanel() {
                       void deleteCurrentTask();
                     }}
                     disabled={Boolean(task.deletedAt)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Trash2 className="h-4 w-4" />
                     {task.deletedAt ? "Im Papierkorb" : "In Papierkorb"}
                   </button>
                 </div>
                 {actionError ? (
-                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
                     {actionError}
                   </div>
                 ) : null}
               </div>
 
-              <div className="flex items-center gap-2 border-t border-gray-100 px-7 py-3 text-sm text-gray-500">
+              <div className="flex flex-wrap items-center gap-2 border-t border-[#263451] px-7 py-3 text-sm text-[#afbdd8]">
                 <TaskActionChip
                   icon={<CheckSquare className="h-4 w-4" />}
-                  label="Add subitem"
+                  label="Schritt hinzufuegen"
                   onClick={() => setSubtaskOpen((current) => !current)}
                 />
-                <TaskActionChip icon={<Paperclip className="h-4 w-4" />} label="Add files" onClick={() => setDocumentDialogOpen(true)} />
-                <TaskActionChip icon={<CheckSquare className="h-4 w-4" />} label="Add approval" onClick={() => setApprovalDialogOpen(true)} />
-                <TaskActionChip icon={<Link2 className="h-4 w-4" />} label="Add dependency" onClick={() => setLinkDialogOpen(true)} />
-                <span className="mx-1 h-5 w-px bg-gray-200" />
+                <TaskActionChip icon={<Paperclip className="h-4 w-4" />} label="Datei anhangen" onClick={() => setDocumentDialogOpen(true)} />
+                <TaskActionChip icon={<CheckSquare className="h-4 w-4" />} label="Freigabe anfragen" onClick={() => setApprovalDialogOpen(true)} />
+                <TaskActionChip icon={<Link2 className="h-4 w-4" />} label="Task verknuepfen" onClick={() => setLinkDialogOpen(true)} />
+                <span className="mx-1 h-5 w-px bg-[#324160]" />
                 <TaskActionChip
                   icon={<Play className="h-4 w-4" />}
-                  label={displayedActualTime}
+                  label={`Zeit ${displayedActualTime}`}
                   onClick={toggleTimeTracking}
                 />
               </div>
             </div>
 
-            <div className="border-b border-gray-100 px-7 py-2">
+            <div className="border-b border-[#263451] px-7 py-2">
               <button
                 type="button"
                 aria-label="Bereichsgroesse anpassen"
                 onPointerDown={startResizing}
                 className="group flex w-full cursor-row-resize items-center justify-center"
               >
-                <span className="h-1.5 w-16 rounded-full bg-gray-200 transition-colors group-hover:bg-gray-300" />
+                <span className="h-1.5 w-16 rounded-full bg-[#324160] transition-colors group-hover:bg-[#415170]" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-5">
+            <div className="flex-1 overflow-y-auto bg-[#18233a] px-7 py-6">
               {subtaskOpen ? (
-                <div className="mb-4 flex gap-2 rounded-2xl border border-[#00B050]/30 bg-[#00B050]/5 p-3">
+                <div className="mb-5 flex gap-2 rounded-2xl border border-[#00B050]/30 bg-[#10301f] p-3">
                   <input
                     value={subtaskTitle}
                     onChange={(event) => setSubtaskTitle(event.target.value)}
-                    placeholder="Subtask title"
-                    className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
+                    placeholder="Teilelement anlegen"
+                    className="flex-1 rounded-lg border border-[#33415d] bg-[#111a2c] px-3 py-2 text-sm text-white focus:border-[#00B050] focus:outline-none"
                   />
                   <Button size="sm" onClick={addSubtask} disabled={!subtaskTitle.trim()}>
                     Hinzufugen
@@ -1053,22 +1018,17 @@ export function TaskDetailPanel() {
                 </div>
               ) : null}
 
-              <section className="rounded-3xl border-2 border-[#00B050] bg-white p-4 shadow-[0_8px_30px_rgba(18,85,42,0.06)]">
-                <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-gray-100 pb-3 text-sm text-gray-500">
-                  <button className="rounded-md px-2 py-1 font-semibold text-gray-700 hover:bg-gray-100">H</button>
-                  <button className="rounded-md px-2 py-1 font-semibold text-gray-700 hover:bg-gray-100">B</button>
-                  <button className="rounded-md px-2 py-1 font-semibold text-gray-700 hover:bg-gray-100">I</button>
-                  <button className="rounded-md px-2 py-1 font-semibold text-gray-700 hover:bg-gray-100">U</button>
-                  <span className="h-5 w-px bg-gray-200" />
-                  <button className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100">1.</button>
-                  <button className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100">-</button>
-                  <button className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100">Link</button>
-                  <button className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100">Table</button>
+              <section className="rounded-[28px] border border-[#273754] bg-[#161f34] p-5 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+                <div className="border-b border-[#25324b] pb-4">
+                  <div className="inline-flex rounded-md bg-[#285f92] px-2 py-1 text-sm font-semibold text-white">
+                    Beschreibung
+                  </div>
+                  <p className="mt-3 text-sm text-[#c5d0e8]">
+                    Halte hier kurz fest, worum es geht und welche Schritte als Nächstes anstehen.
+                  </p>
                 </div>
 
-                <label className="mb-2 block text-sm font-semibold text-gray-600">Action Items:</label>
-
-                <div className="rounded-2xl border border-gray-200 bg-slate-50/50 p-3">
+                <div className="mt-4 rounded-2xl border border-[#2d3a58] bg-[#111a2c] p-3">
                   <textarea
                     ref={descriptionRef}
                     value={description}
@@ -1083,14 +1043,14 @@ export function TaskDetailPanel() {
                         void saveDescription();
                       }
                     }}
-                    placeholder="Describe the task, scope, stakeholders, and next action items..."
+                    placeholder="Beschreibe die Aufgabe in einfachen Worten..."
                     style={{ height: actionItemsHeight }}
-                    className="w-full overflow-y-auto rounded-xl border border-transparent bg-white px-3 py-3 text-[1.02rem] leading-8 text-gray-800 shadow-sm focus:border-[#00B050]/50 focus:outline-none focus:ring-2 focus:ring-[#00B050]/20"
+                    className="w-full overflow-y-auto rounded-xl border border-transparent bg-[#111a2c] px-3 py-3 text-[1rem] leading-8 text-[#e7edf9] placeholder:text-[#6f7f9f] focus:border-[#00B050]/50 focus:outline-none focus:ring-2 focus:ring-[#00B050]/20"
                   />
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-[#90a0c4]">
                       {descriptionError ? (
-                        <span className="text-red-600">{descriptionError}</span>
+                        <span className="text-red-300">{descriptionError}</span>
                       ) : descriptionDirty ? (
                         <span>Nicht gespeichert</span>
                       ) : (
@@ -1103,7 +1063,7 @@ export function TaskDetailPanel() {
                       disabled={descriptionSaving || !descriptionDirty}
                       className="rounded-lg bg-[#00B050] px-3 py-2 text-sm font-medium text-white hover:bg-[#00963f] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {descriptionSaving ? "Speichert..." : "Action Items speichern"}
+                      {descriptionSaving ? "Speichert..." : "Beschreibung speichern"}
                     </button>
                   </div>
                 </div>
@@ -1115,14 +1075,15 @@ export function TaskDetailPanel() {
                     onPointerDown={startActionItemsResizing}
                     className="group flex w-full cursor-row-resize items-center justify-center py-1"
                   >
-                    <span className="h-1.5 w-14 rounded-full bg-gray-200 transition-colors group-hover:bg-gray-300" />
+                    <span className="h-1.5 w-14 rounded-full bg-[#324160] transition-colors group-hover:bg-[#415170]" />
                   </button>
                 </div>
 
                 {task.subtasks.length > 0 ? (
-                  <div className="mt-3 space-y-2 border-t border-gray-100 pt-4">
+                  <div className="mt-3 space-y-3 border-t border-[#25324b] pt-4">
+                    <div className="text-sm font-medium text-white">Schritte</div>
                     {task.subtasks.map((subtask) => (
-                      <label key={subtask.id} className="flex items-start gap-3 text-base text-gray-700">
+                      <label key={subtask.id} className="flex items-start gap-3 text-base text-[#e7edf9]">
                         <input
                           type="checkbox"
                           checked={subtask.status === "Completed"}
@@ -1149,9 +1110,9 @@ export function TaskDetailPanel() {
                               updateTaskOptimistic(subtask.id, updated);
                             })
                           }
-                          className="mt-1 h-4 w-4 rounded border-gray-300"
+                          className="mt-1 h-4 w-4 rounded border-[#51607e] bg-[#111a2c]"
                         />
-                        <span className={cn(subtask.status === "Completed" && "text-gray-400 line-through")}>
+                        <span className={cn(subtask.status === "Completed" && "text-[#6f7f9f] line-through")}>
                           {subtask.title}
                         </span>
                       </label>
@@ -1160,24 +1121,25 @@ export function TaskDetailPanel() {
                 ) : null}
               </section>
 
-              <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5">
+              <section className="mt-6 rounded-[28px] border border-[#273754] bg-[#161f34] p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Microsoft-Dokumente</h3>
-                    <p className="mt-1 text-xs text-gray-500">Word, Excel, PowerPoint oder OneDrive-Dateien zum Task verlinken.</p>
+                    <div className="text-xs uppercase tracking-[0.18em] text-[#7f91b8]">Dateien</div>
+                    <h3 className="mt-1 text-sm font-semibold text-white">Angehaengte Dateien</h3>
+                    <p className="mt-1 text-xs text-[#90a0c4]">Hier findest du alle Dokumente, die zu dieser Aufgabe gehoeren.</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       {!microsoftStatus?.configured ? (
-                        <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
+                        <span className="rounded-full bg-amber-500/15 px-2.5 py-1 font-medium text-amber-100">
                           Microsoft OAuth noch nicht konfiguriert
                         </span>
                       ) : microsoftStatus.connected ? (
-                        <span className="rounded-full bg-green-100 px-2.5 py-1 font-medium text-green-700">
+                        <span className="rounded-full bg-green-500/15 px-2.5 py-1 font-medium text-green-100">
                           Verbunden als {microsoftStatus.email ?? "Microsoft-User"}
                         </span>
                       ) : (
                         <a
                           href="/api/integrations/microsoft/connect"
-                          className="rounded-full bg-blue-100 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-200"
+                          className="rounded-full bg-sky-500/15 px-2.5 py-1 font-medium text-sky-100 hover:bg-sky-500/25"
                         >
                           Mit Microsoft verbinden
                         </a>
@@ -1185,20 +1147,20 @@ export function TaskDetailPanel() {
                     </div>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => setDocumentDialogOpen(true)}>
-                    <Plus className="h-4 w-4" />
-                    Dokument
+                      <Plus className="h-4 w-4" />
+                      Datei
                   </Button>
                 </div>
 
                 <div className="mt-4 space-y-3">
                   {(task.documents ?? []).length > 0 ? (
                     (task.documents ?? []).map((document) => (
-                      <div key={document.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
+                      <div key={document.id} className="flex items-center justify-between gap-3 rounded-2xl border border-[#293754] bg-[#111a2c] px-4 py-3">
                         <div className="flex items-center gap-3">
                           <DocumentIcon type={document.documentType} />
                           <div>
-                            <div className="text-sm font-medium text-gray-900">{document.title}</div>
-                            <div className="text-xs text-gray-500">{document.provider} · {document.documentType}</div>
+                            <div className="text-sm font-medium text-white">{document.title}</div>
+                            <div className="text-xs text-[#90a0c4]">{formatDate(document.createdAt)} · {document.provider} · {document.documentType}</div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1206,14 +1168,14 @@ export function TaskDetailPanel() {
                             href={document.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                            className="inline-flex items-center gap-1 rounded-lg border border-[#33415d] bg-[#1a2742] px-3 py-2 text-xs text-[#d4def5] hover:bg-[#223150]"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                             Oeffnen
                           </a>
                           <button
                             onClick={() => removeDocument(document.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 hover:bg-red-100"
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100 hover:bg-red-500/20"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             Entfernen
@@ -1222,15 +1184,94 @@ export function TaskDetailPanel() {
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-5 text-sm text-gray-500">
+                    <div className="rounded-2xl border border-dashed border-[#33415d] px-4 py-5 text-sm text-[#90a0c4]">
                       Noch kein Microsoft-Dokument verknuepft.
                     </div>
                   )}
                 </div>
               </section>
 
+              <section className="mt-6 grid gap-6 xl:grid-cols-2">
+                <div className="rounded-[28px] border border-[#273754] bg-[#161f34] p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-[#7f91b8]">Freigaben</div>
+                      <h3 className="mt-1 text-sm font-semibold text-white">Wer muss noch zustimmen?</h3>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setApprovalDialogOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                      Hinzufuegen
+                    </Button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {(task.approvals ?? []).length > 0 ? (
+                      (task.approvals ?? []).map((approval) => (
+                        <div key={approval.id} className="rounded-2xl border border-[#293754] bg-[#111a2c] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-white">{approval.approver.name}</div>
+                              <div className="text-xs text-[#90a0c4]">{approval.note || "Ohne Notiz"}</div>
+                            </div>
+                            <select
+                              value={approval.status}
+                              onChange={(event) => void updateApproval(approval.id, { status: event.target.value as "pending" | "approved" | "rejected" })}
+                              className="rounded-md border border-[#33415d] bg-[#1a2742] px-3 py-2 text-xs text-[#d4def5] focus:outline-none"
+                            >
+                              <option value="pending">offen</option>
+                              <option value="approved">freigegeben</option>
+                              <option value="rejected">abgelehnt</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-[#33415d] px-4 py-5 text-sm text-[#90a0c4]">
+                        Noch kein Freigabeprozess angelegt.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-[#273754] bg-[#161f34] p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-[#7f91b8]">Abhaengigkeiten</div>
+                      <h3 className="mt-1 text-sm font-semibold text-white">Verknuepfte Aufgaben</h3>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setLinkDialogOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                      Hinzufuegen
+                    </Button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {(task.links ?? []).length > 0 ? (
+                      (task.links ?? []).map((link) => (
+                        <div key={link.id} className="rounded-2xl border border-[#293754] bg-[#111a2c] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-white">{link.title}</div>
+                              <div className="text-xs text-[#90a0c4]">{link.linkType === "internal" ? "Interner Task" : link.url}</div>
+                            </div>
+                            <button
+                              onClick={() => removeLink(link.id)}
+                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-100 hover:bg-red-500/20"
+                            >
+                              Entfernen
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-[#33415d] px-4 py-5 text-sm text-[#90a0c4]">
+                        Noch keine verlinkten Tasks.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+
               <section className="mt-8">
-                <div className="text-center text-sm font-medium text-gray-400">This month</div>
+                <div className="text-center text-sm font-medium text-[#7f91b8]">Kommentare und Aktivitaet</div>
                 <div className="mt-4 space-y-4">
                   {activityItems.map((item) => (
                     <div key={item.id} className="flex gap-3">
@@ -1244,10 +1285,32 @@ export function TaskDetailPanel() {
                       </Avatar>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-800">{item.author.name}</span>
-                          <span className="text-xs text-gray-400">{formatDate(item.createdAt)}</span>
+                          <span className="text-sm font-semibold text-white">{item.author.name}</span>
+                          <span className="text-xs text-[#7f91b8]">{formatDate(item.createdAt)}</span>
                         </div>
-                        <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-500">{item.body}</p>
+                        {(item.mentions ?? []).length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {item.mentions.map((mentionedUser) => {
+                              const mentionsCurrentUser = currentUser?.id === mentionedUser.id;
+                              return (
+                                <span
+                                  key={`${item.id}-${mentionedUser.id}`}
+                                  className={cn(
+                                    "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold",
+                                    mentionsCurrentUser
+                                      ? "bg-[#0f6a52] text-[#c8fff0] shadow-[0_0_0_1px_rgba(21,187,143,0.2)]"
+                                      : "bg-[#153b33] text-[#88dfc5]"
+                                  )}
+                                >
+                                  @{mentionedUser.name}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                        <div className="mt-1 whitespace-pre-wrap text-sm text-[#c5d0e8]">
+                          {renderCommentWithMentions(item)}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1255,9 +1318,10 @@ export function TaskDetailPanel() {
               </section>
             </div>
 
-            <div className="border-t border-gray-100 px-7 py-5">
-              <div className="rounded-2xl border-2 border-[#00B050] bg-white px-4 py-3">
+            <div className="border-t border-[#263451] bg-[#161f34] px-7 py-5">
+              <div className="rounded-2xl border-2 border-[#00B050]/60 bg-[#111a2c] px-4 py-3 shadow-[0_0_0_1px_rgba(0,176,80,0.08)]">
                 <textarea
+                  ref={commentRef}
                   value={comment}
                   onChange={(event) => setComment(event.target.value)}
                   onCompositionStart={() => setIsCommentComposing(true)}
@@ -1269,16 +1333,48 @@ export function TaskDetailPanel() {
                     event.preventDefault();
                     void submitCommentFromKeyboard();
                   }}
-                  placeholder="Add a comment... Use @julia or @rafaela"
+                  placeholder="Einen Kommentar hinzufuegen..."
                   rows={comment.trim() ? 3 : 1}
-                  className="w-full resize-none bg-transparent text-base text-gray-700 placeholder:text-gray-400 focus:outline-none"
+                  className="w-full resize-none bg-transparent text-base text-[#e7edf9] placeholder:text-[#6f7f9f] focus:outline-none"
                 />
-                <p className="mt-2 text-xs text-gray-400">
-                  Mentions work with simple handles like `@julia`, `@rafaela`, `@amy`.
+                <p className="mt-2 text-xs text-[#7f91b8]">
+                  Mit `@` kannst du direkt eine Person erwaehnen.
                 </p>
                 <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-gray-400">
+                  <div className="relative flex items-center gap-3 text-[#7f91b8]">
                     <Paperclip className="h-4 w-4" />
+                    <button
+                      type="button"
+                      onClick={() => setMentionMenuOpen((current) => !current)}
+                      className="inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-[#33415d] bg-[#1a2742] px-2 text-sm font-semibold text-[#d4def5] hover:bg-[#223150]"
+                    >
+                      @
+                    </button>
+                    {mentionMenuOpen ? (
+                      <div className="absolute bottom-10 left-7 z-30 min-w-[260px] rounded-xl border border-[#33415d] bg-[#1a2742] p-2 shadow-xl">
+                        <div className="px-2 pb-2 text-xs uppercase tracking-[0.14em] text-[#7f91b8]">Person auswaehlen</div>
+                        <div className="max-h-56 overflow-y-auto">
+                          {users.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => insertMention(user)}
+                              className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-[#223150]"
+                            >
+                              <Avatar className="h-7 w-7">
+                                <AvatarFallback className="text-[10px]" style={{ backgroundColor: `${user.color}30`, color: user.color }}>
+                                  {getInitials(user.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-white">{user.name}</div>
+                                <div className="truncate text-xs text-[#7f91b8]">@{getUserMentionInsertToken(user)}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <Link2 className="h-4 w-4" />
                     <Clock3 className="h-4 w-4" />
                   </div>
@@ -1289,7 +1385,7 @@ export function TaskDetailPanel() {
                     className="rounded-xl px-5"
                   >
                     <Send className="h-4 w-4" />
-                    Send
+                    Senden
                   </Button>
                 </div>
               </div>
@@ -1323,10 +1419,58 @@ function flattenTaskTree(task: Task): Task[] {
   return [task, ...task.subtasks.flatMap((subtask) => flattenTaskTree(subtask))];
 }
 
+function normalizeMentionToken(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getUserMentionKeys(user: User) {
+  const fullName = normalizeMentionToken(user.name);
+  const firstName = normalizeMentionToken(user.name.split(/\s+/)[0] ?? "");
+  const emailName = normalizeMentionToken(user.email.split("@")[0] ?? "");
+  return Array.from(new Set([fullName, firstName, emailName].filter(Boolean)));
+}
+
+function getUserMentionInsertToken(user: User) {
+  const keys = getUserMentionKeys(user);
+  return keys[1] ?? keys[2] ?? keys[0] ?? "team";
+}
+
+function renderCommentWithMentions(comment: TaskComment) {
+  const mentionsByToken = new Map<string, User>();
+
+  for (const mentionedUser of comment.mentions ?? []) {
+    for (const token of getUserMentionKeys(mentionedUser)) {
+      mentionsByToken.set(token, mentionedUser);
+    }
+  }
+
+  return comment.body.split(/(@[a-zA-Z0-9._-]+)/g).map((part, index) => {
+    if (!part.startsWith("@")) {
+      return <React.Fragment key={`${comment.id}-${index}`}>{part}</React.Fragment>;
+    }
+
+    const token = normalizeMentionToken(part.slice(1));
+    const mentionedUser = mentionsByToken.get(token);
+
+    if (!mentionedUser) {
+      return <React.Fragment key={`${comment.id}-${index}`}>{part}</React.Fragment>;
+    }
+
+    return (
+      <span
+        key={`${comment.id}-${index}`}
+        className="rounded-md bg-[#153b33] px-1.5 py-0.5 font-semibold text-[#88dfc5]"
+      >
+        @{mentionedUser.name}
+      </span>
+    );
+  });
+}
+
 function TaskMetaCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-[#f8fafc] px-2 py-1.5">
-      <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] leading-none text-gray-500">{label}</div>
+    <div className="rounded-xl border border-[#2c3b58] bg-[#0f3d63] px-3 py-2.5">
+      <div className="mb-1 text-[11px] font-medium leading-none text-[#89a9d1]">{label}</div>
       {value}
     </div>
   );
@@ -1344,15 +1488,15 @@ function CompactMetaCard({
   onAction?: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-2 py-1.5">
-      <div className="text-[9px] font-semibold uppercase tracking-[0.08em] leading-none text-gray-500">{label}</div>
+    <div className="rounded-xl border border-[#273754] bg-[#161f34] px-3 py-2.5">
+      <div className="text-[10px] font-medium uppercase tracking-[0.08em] leading-none text-[#7f91b8]">{label}</div>
       <div className="mt-0.5 flex items-center justify-between gap-2">
-        <span className="truncate text-[10px] font-medium leading-none text-gray-700">{value}</span>
+        <span className="truncate text-[12px] font-medium leading-none text-white">{value}</span>
         {actionLabel && onAction ? (
           <button
             type="button"
             onClick={onAction}
-            className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-medium text-[#0e6d36] hover:bg-[#00B050]/10"
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-[#8fd9af] hover:bg-[#00B050]/10"
           >
             {actionLabel}
           </button>
@@ -1374,7 +1518,7 @@ function TaskActionChip({
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+      className="inline-flex items-center gap-1.5 rounded-xl border border-[#2d3a58] bg-[#161f34] px-3 py-2 text-sm text-[#d4def5] hover:bg-[#1f2b45]"
     >
       {icon}
       <span>{label}</span>
@@ -1662,16 +1806,16 @@ function StatusSelector({ status, onChange }: { status: string; onChange: (statu
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className={cn("flex h-6 items-center gap-1 rounded-md px-1.5 py-0 text-[10px] font-medium leading-none", config.bg, config.text)}
+        className="flex h-9 items-center gap-2 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-sm font-medium text-white"
       >
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: config.color }} />
         {config.label}
-        <ChevronDown className="h-2.5 w-2.5" />
+        <ChevronDown className="h-3.5 w-3.5 text-[#8da0c4]" />
       </button>
       {open ? (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1.5 min-w-[150px] rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
+          <div className="absolute left-0 top-full z-20 mt-1.5 min-w-[170px] rounded-lg border border-[#33415d] bg-[#1a2742] py-1 shadow-xl">
             {STATUSES.map((candidate) => {
               const candidateConfig = STATUS_CONFIG[candidate];
               return (
@@ -1681,7 +1825,7 @@ function StatusSelector({ status, onChange }: { status: string; onChange: (statu
                     onChange(candidate);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-sm text-[#d4def5] hover:bg-[#223150]"
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: candidateConfig.color }} />
                   {candidateConfig.label}
@@ -1705,35 +1849,36 @@ function AssigneeSelector({
   const { users } = useAppStore();
   const [open, setOpen] = useState(false);
   const assignees = users.filter((user) => assigneeIds.includes(user.id));
+  const assigneeSummary = assignees.map((assignee) => assignee.name).join(", ");
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-[20px] w-full items-center gap-1 rounded-md border border-transparent bg-white/70 px-1 text-left text-[10px] leading-none hover:text-[#00B050]"
+        className="flex min-h-[36px] w-full items-center gap-2 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-left text-sm leading-none text-white hover:text-[#9ce0b8]"
       >
         {assignees.length > 0 ? (
           <>
             <div className="flex -space-x-2">
               {assignees.slice(0, 3).map((assignee) => (
-                <Avatar key={assignee.id} className="h-4 w-4 border border-white">
-                  <AvatarFallback className="text-[7px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
+                <Avatar key={assignee.id} className="h-6 w-6 border border-[#111a2c]">
+                  <AvatarFallback className="text-[9px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
                     {getInitials(assignee.name)}
                   </AvatarFallback>
                 </Avatar>
               ))}
             </div>
-            <span className="truncate text-gray-700">{assignees.map((assignee) => assignee.name).join(", ")}</span>
+            <span className="truncate">{assigneeSummary}</span>
           </>
         ) : (
-          <span className="text-gray-400">Empty</span>
+          <span className="text-[#7f91b8]">Niemand zugewiesen</span>
         )}
       </button>
       {open ? (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1.5 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
-            <AssigneeOption label="Empty" onClick={() => { onChange([]); setOpen(false); }} />
+          <div className="absolute left-0 top-full z-20 mt-1.5 min-w-[220px] rounded-lg border border-[#33415d] bg-[#1a2742] py-1 shadow-xl">
+            <AssigneeOption label="Niemand" onClick={() => { onChange([]); setOpen(false); }} />
             {users.map((user) => (
               <AssigneeOption
                 key={user.id}
@@ -1767,19 +1912,20 @@ function AssigneeOption({
   onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} className={cn("flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] hover:bg-gray-50", active && "bg-green-50")}>
+    <button onClick={onClick} className={cn("flex w-full items-center gap-2 px-2.5 py-2 text-sm hover:bg-[#223150]", active && "bg-[#10301f]")}>
       {user ? (
         <>
-          <Avatar className="h-4.5 w-4.5">
-            <AvatarFallback className="text-[7px]" style={{ backgroundColor: `${user.color}30`, color: user.color }}>
+          <Avatar className="h-5 w-5">
+            <AvatarFallback className="text-[8px]" style={{ backgroundColor: `${user.color}30`, color: user.color }}>
               {getInitials(user.name)}
             </AvatarFallback>
           </Avatar>
-          <span className="text-gray-700">{user.name}</span>
+          <span className="text-[#d4def5]">{user.name}</span>
         </>
       ) : (
-        <span className="text-gray-400">{label}</span>
+        <span className="text-[#90a0c4]">{label}</span>
       )}
+      {active ? <Square className="ml-auto h-3.5 w-3.5 fill-[#00B050] text-[#00B050]" /> : null}
     </button>
   );
 }
