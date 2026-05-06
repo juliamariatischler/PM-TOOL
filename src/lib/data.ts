@@ -1203,6 +1203,28 @@ export async function getTaskDetail(id: string) {
   };
 }
 
+export async function setTaskCreatorIfMissing(id: string, creatorId: string) {
+  const admin = getSupabaseAdminClient();
+
+  try {
+    await selectTaskRow((select) =>
+      admin
+        .from("tasks")
+        .update({ created_by: creatorId })
+        .eq("id", id)
+        .is("created_by", null)
+        .select(select)
+        .maybeSingle()
+    );
+  } catch (error) {
+    if (!isMissingTaskColumnError(error)) {
+      throw error;
+    }
+  }
+
+  return getTaskDetail(id);
+}
+
 export async function createSpace(input: {
   name: string;
   color?: string | null;
@@ -1389,7 +1411,7 @@ export async function deleteProject(id: string) {
 export async function createTask(input: {
   title: string;
   projectId: string;
-  creatorId?: string | null;
+  creatorId: string;
   status?: string | null;
   assigneeId?: string | null;
   assigneeIds?: string[] | null;
@@ -1404,6 +1426,10 @@ export async function createTask(input: {
   plannedCost?: number | null;
   position?: number | null;
 }) {
+  if (!input.creatorId) {
+    throw new Error("creatorId is required");
+  }
+
   const admin = getSupabaseAdminClient();
   const baseInsert = {
     title: input.title,
@@ -1426,7 +1452,7 @@ export async function createTask(input: {
       .from("tasks")
       .insert({
         ...baseInsert,
-        created_by: input.creatorId ?? null,
+        created_by: input.creatorId,
         actual_time_minutes: input.actualTimeMinutes ?? 0,
         timer_started_at: input.timerStartedAt ?? null,
       })

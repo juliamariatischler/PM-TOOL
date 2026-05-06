@@ -24,53 +24,53 @@ export function Toolbar() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   return (
-    <div className="border-b border-gray-200 bg-white">
+    <div className="border-b border-[#283754] bg-[#121b2f]">
       {/* View tabs */}
-      <div className="flex items-center gap-0 px-4 border-b border-gray-100 overflow-x-auto">
+      <div className="flex items-center gap-0 overflow-x-auto border-b border-[#22304b] px-4">
         {VIEWS.map(view => (
           <button
             key={view.id}
             onClick={() => setActiveView(view.id)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap",
+              "flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors",
               activeView === view.id
-                ? "border-[#00B050] text-[#00B050] font-medium"
-                : "border-transparent text-gray-500 hover:text-gray-800"
+                ? "border-[#00B050] text-[#8ff0ba]"
+                : "border-transparent text-[#94a3c3] hover:text-white"
             )}
           >
             {view.icon}
             {view.label}
           </button>
         ))}
-        <button className="flex items-center gap-1 px-3 py-2.5 text-sm text-gray-400 hover:text-gray-600">
+        <button className="flex items-center gap-1 px-3 py-3 text-sm text-[#7f91b8] hover:text-white">
           <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto">
+      <div className="flex items-center gap-2 overflow-x-auto px-4 py-2.5">
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#7f91b8]" />
           <input
             value={filters.search}
             onChange={e => setFilter("search", e.target.value)}
             placeholder="Search tasks..."
-            className="h-8 pl-8 pr-3 rounded-md border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B050] w-48"
+            className="h-9 w-52 rounded-md border border-[#33415d] bg-[#0f1728] pl-8 pr-3 text-sm text-[#e7edf9] placeholder:text-[#6f7f9f] focus:outline-none focus:ring-2 focus:ring-[#00B050]/60"
           />
         </div>
 
-        <div className="h-5 w-px bg-gray-200" />
+        <div className="h-5 w-px bg-[#33415d]" />
 
         {/* Filter button */}
         <div className="relative">
           <button
             onClick={() => setFilterOpen(o => !o)}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm border transition-colors",
+              "flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
               filterOpen
-                ? "border-[#00B050] text-[#00B050] bg-green-50"
-                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                ? "border-[#00B050] bg-[#10301f] text-[#8ff0ba]"
+                : "border-[#33415d] text-[#c8d3eb] hover:bg-[#223150]"
             )}
           >
             <Filter className="h-3.5 w-3.5" />
@@ -85,9 +85,9 @@ export function Toolbar() {
           {filterOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
-              <div className="absolute top-full left-0 mt-1 z-20 w-64 rounded-xl border border-gray-200 bg-white shadow-xl p-4 space-y-4">
+              <div className="absolute left-0 top-full z-20 mt-1 w-64 space-y-4 rounded-xl border border-[#33415d] bg-[#17233a] p-4 shadow-xl">
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Status</p>
+                  <p className="mb-2 text-xs font-semibold uppercase text-[#94a3c3]">Status</p>
                   <div className="flex flex-wrap gap-1.5">
                     {STATUSES.map(s => (
                       <button
@@ -97,10 +97,10 @@ export function Toolbar() {
                           setFilter("status", curr.includes(s) ? curr.filter(x => x !== s) : [...curr, s]);
                         }}
                         className={cn(
-                          "rounded-full px-2.5 py-1 text-xs border transition-colors",
+                          "rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
                           filters.status.includes(s)
-                            ? "border-[#00B050] bg-green-50 text-[#00B050]"
-                            : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                            ? "border-[#00B050] bg-[#10301f] text-[#8ff0ba]"
+                            : "border-[#33415d] text-[#c8d3eb] hover:bg-[#223150]"
                         )}
                       >
                         {s}
@@ -109,7 +109,7 @@ export function Toolbar() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Assignee</p>
+                  <p className="mb-2 text-xs font-semibold uppercase text-[#94a3c3]">Assignee</p>
                   <div className="flex flex-wrap gap-1.5">
                     {users.map(u => (
                       <button
@@ -119,10 +119,10 @@ export function Toolbar() {
                           setFilter("assigneeId", curr.includes(u.id) ? curr.filter(x => x !== u.id) : [...curr, u.id]);
                         }}
                         className={cn(
-                          "rounded-full px-2.5 py-1 text-xs border transition-colors",
+                          "rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
                           filters.assigneeId.includes(u.id)
-                            ? "border-[#00B050] bg-green-50 text-[#00B050]"
-                            : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                            ? "border-[#00B050] bg-[#10301f] text-[#8ff0ba]"
+                            : "border-[#33415d] text-[#c8d3eb] hover:bg-[#223150]"
                         )}
                       >
                         {u.name}
@@ -137,7 +137,7 @@ export function Toolbar() {
                     setFilter("createdById", []);
                     setFilter("lifecycle", "active");
                   }}
-                  className="text-xs text-gray-400 hover:text-red-500"
+                  className="text-xs text-[#94a3c3] hover:text-red-300"
                 >
                   Clear all filters
                 </button>
@@ -147,14 +147,14 @@ export function Toolbar() {
         </div>
 
         {/* Group by */}
-        <button className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm border border-gray-200 text-gray-600 hover:bg-gray-50">
+        <button className="flex items-center gap-1.5 rounded-md border border-[#33415d] px-3 py-2 text-sm text-[#c8d3eb] hover:bg-[#223150]">
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Group by
           <ChevronDown className="h-3 w-3 text-gray-400" />
         </button>
 
         {/* Fields */}
-        <button className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm border border-gray-200 text-gray-600 hover:bg-gray-50">
+        <button className="flex items-center gap-1.5 rounded-md border border-[#33415d] px-3 py-2 text-sm text-[#c8d3eb] hover:bg-[#223150]">
           Fields
           <ChevronDown className="h-3 w-3 text-gray-400" />
         </button>
@@ -163,13 +163,13 @@ export function Toolbar() {
         <div className="flex-1" />
 
         {/* Right tools */}
-        <button className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded">
+        <button className="rounded p-2 text-[#7f91b8] hover:bg-[#223150] hover:text-white">
           <RotateCcw className="h-4 w-4" />
         </button>
-        <button className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded">
+        <button className="rounded p-2 text-[#7f91b8] hover:bg-[#223150] hover:text-white">
           <RotateCw className="h-4 w-4" />
         </button>
-        <button className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm border border-gray-200 text-gray-600 hover:bg-gray-50">
+        <button className="flex items-center gap-1.5 rounded-md border border-[#33415d] px-3 py-2 text-sm text-[#c8d3eb] hover:bg-[#223150]">
           <Link className="h-3.5 w-3.5" />
           Share
         </button>

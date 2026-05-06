@@ -64,34 +64,34 @@ export function WorkloadView() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden bg-[#111a2c]">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200">
+      <div className="flex items-center gap-3 border-b border-[#283754] bg-[#121b2f] px-4 py-2.5">
         <input
           placeholder="Search by name..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="h-8 rounded-md border border-gray-200 px-3 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-[#00B050]"
+          className="h-9 w-48 rounded-md border border-[#33415d] bg-[#0f1728] px-3 text-sm text-[#e7edf9] placeholder:text-[#6f7f9f] focus:outline-none focus:ring-2 focus:ring-[#00B050]/60"
         />
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setWeekOffset(w => w - 1)}
-            className="px-2 py-1 text-sm border border-gray-200 rounded hover:bg-gray-50"
+            className="rounded border border-[#33415d] px-3 py-1.5 text-sm text-[#c8d3eb] hover:bg-[#223150]"
           >
             ←
           </button>
-          <span className="text-sm text-gray-600">
+          <span className="text-sm font-medium text-[#d4def5]">
             {format(weekStart, "MMM d")} – {format(addDays(weekStart, 6), "MMM d, yyyy")}
           </span>
           <button
             onClick={() => setWeekOffset(w => w + 1)}
-            className="px-2 py-1 text-sm border border-gray-200 rounded hover:bg-gray-50"
+            className="rounded border border-[#33415d] px-3 py-1.5 text-sm text-[#c8d3eb] hover:bg-[#223150]"
           >
             →
           </button>
           <button
             onClick={() => setWeekOffset(0)}
-            className="px-2 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50"
+            className="rounded border border-[#33415d] px-3 py-1.5 text-xs text-[#c8d3eb] hover:bg-[#223150]"
           >
             Today
           </button>
@@ -101,24 +101,24 @@ export function WorkloadView() {
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse">
-          <thead className="sticky top-0 z-10 bg-white">
-            <tr className="border-b border-gray-200">
-              <th className="w-48 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+          <thead className="sticky top-0 z-10 bg-[#17233a]">
+            <tr className="border-b border-[#2b3a58]">
+              <th className="w-48 px-4 py-3 text-left text-xs font-semibold uppercase text-[#94a3c3]">
                 Member
               </th>
               {days.map(day => (
                 <th
                   key={day.toISOString()}
                   className={cn(
-                    "px-2 py-3 text-center text-xs font-semibold min-w-[80px]",
-                    isWeekend(day) ? "text-gray-300" : "text-gray-500",
-                    isSameDay(day, new Date()) && "text-[#00B050]"
+                    "min-w-[80px] px-2 py-3 text-center text-xs font-semibold",
+                    isWeekend(day) ? "text-[#607193]" : "text-[#94a3c3]",
+                    isSameDay(day, new Date()) && "text-[#8ff0ba]"
                   )}
                 >
                   <div>{format(day, "EEE")}</div>
                   <div className={cn(
                     "text-base font-bold mt-0.5",
-                    isSameDay(day, new Date()) && "text-[#00B050]"
+                    isSameDay(day, new Date()) && "text-[#8ff0ba]"
                   )}>
                     {format(day, "d")}
                   </div>
@@ -134,12 +134,12 @@ export function WorkloadView() {
               return (
                 <React.Fragment key={user.id}>
                   <tr
-                    className="border-b border-gray-100 cursor-pointer hover:bg-gray-50"
+                    className="cursor-pointer border-b border-[#22304b] hover:bg-[#17233a]"
                     onClick={() => toggleUser(user.id)}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-400">
+                        <span className="text-[#7f91b8]">
                           {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                         </span>
                         <Avatar className="h-7 w-7">
@@ -147,8 +147,8 @@ export function WorkloadView() {
                             {getInitials(user.name)}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-sm font-medium text-gray-700">{user.name}</span>
-                        <span className="text-xs text-gray-400">({userTasks.length})</span>
+                        <span className="text-sm font-medium text-[#e7edf9]">{user.name}</span>
+                        <span className="text-xs text-[#94a3c3]">({userTasks.length})</span>
                       </div>
                     </td>
                     {days.map(day => {
@@ -159,7 +159,7 @@ export function WorkloadView() {
                       const weekend = isWeekend(day);
 
                       return (
-                        <td key={day.toISOString()} className={cn("px-2 py-3 text-center", weekend && "bg-gray-50/50")}>
+                        <td key={day.toISOString()} className={cn("px-2 py-3 text-center", weekend && "bg-[#0f1728]/45")}>
                           {!isEmpty && (
                             <div className="flex flex-col items-center gap-0.5">
                               <div
@@ -174,21 +174,21 @@ export function WorkloadView() {
                               >
                                 {Math.round(pct)}%
                               </div>
-                              <span className="text-[10px] text-gray-400">{load.toFixed(1)}h</span>
+                              <span className="text-[10px] text-[#94a3c3]">{load.toFixed(1)}h</span>
                             </div>
                           )}
-                          {isEmpty && <span className="text-gray-200 text-xs">—</span>}
+                          {isEmpty && <span className="text-xs text-[#44506c]">—</span>}
                         </td>
                       );
                     })}
                   </tr>
 
                   {isExpanded && userTasks.map(task => (
-                    <tr key={task.id} className="border-b border-gray-50 bg-gray-50/40">
+                    <tr key={task.id} className="border-b border-[#22304b] bg-[#17233a]/65">
                       <td className="px-4 py-1.5 pl-10">
                         <div className="flex items-center gap-2">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_CONFIG[task.status]?.color ?? "#6b7280" }} />
-                          <span className="text-xs text-gray-600 truncate max-w-[140px]">{task.title}</span>
+                          <span className="max-w-[140px] truncate text-xs text-[#c8d3eb]">{task.title}</span>
                         </div>
                       </td>
                       {days.map(day => {

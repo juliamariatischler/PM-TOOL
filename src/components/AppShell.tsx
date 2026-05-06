@@ -10,7 +10,6 @@ import { InboxView } from "@/components/inbox/InboxView";
 import { TaskDetailPanel } from "@/components/task-detail/TaskDetailPanel";
 import { GanttView } from "@/components/gantt/GanttView";
 import { CommandPalette } from "@/components/ui/command-palette";
-import { MobilePlatformNotice } from "@/components/mobile/MobilePlatformNotice";
 import { Loader2, FolderOpen, LogOut, Plus } from "lucide-react";
 import { CreateSpaceDialog } from "@/components/sidebar/CreateSpaceDialog";
 
@@ -90,23 +89,21 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
   const currentSpace = spaces.find(s => s.id === selectedSpaceId);
 
   return (
-    <div className="flex h-full bg-white overflow-hidden">
+    <div className="flex h-full overflow-hidden bg-[#111a2c] text-[#e7edf9]">
       <Sidebar currentUserId={currentUser.id} onCreateSpace={() => setCreateSpaceOpen(true)} onReload={reload} />
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        <MobilePlatformNotice />
-
         {/* Breadcrumb */}
-        <div className="flex items-center justify-between gap-4 border-b border-gray-100 bg-white px-4 py-2">
-          <span className="text-sm text-gray-400">{currentSpace ? currentSpace.name : "All Spaces"}</span>
+        <div className="flex items-center justify-between gap-4 border-b border-[#283754] bg-[#121b2f] px-5 py-3">
+          <span className="text-sm font-medium text-[#b7c4dd]">{currentSpace ? currentSpace.name : "All Spaces"}</span>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <div className="text-sm font-medium text-gray-700">{currentUser.name}</div>
-              <div className="text-xs text-gray-400">{currentUser.email}</div>
+              <div className="text-sm font-semibold text-white">{currentUser.name}</div>
+              <div className="text-xs text-[#8393b6]">{currentUser.email}</div>
             </div>
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#33415d] bg-[#17233a] px-3 py-2 text-xs font-semibold text-[#d4def5] hover:bg-[#223150] disabled:opacity-60"
             >
               <LogOut className="h-3.5 w-3.5" />
               {loggingOut ? "..." : "Logout"}
@@ -119,10 +116,10 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
         {/* Main content */}
         <div className="flex-1 overflow-hidden relative">
           {loading ? (
-            <div className="flex h-full items-center justify-center">
+          <div className="flex h-full items-center justify-center bg-[#111a2c]">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-[#00B050]" />
-                <p className="text-sm text-gray-400">Laden...</p>
+                <p className="text-sm text-[#94a3c3]">Laden...</p>
               </div>
             </div>
           ) : spaces.length === 0 ? (
@@ -155,12 +152,12 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
 function EmptyWorkspace({ onCreateSpace }: { onCreateSpace: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6">
-      <div className="h-20 w-20 rounded-2xl bg-gray-100 flex items-center justify-center">
-        <FolderOpen className="h-10 w-10 text-gray-300" />
+      <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-[#2b3a58] bg-[#17233a]">
+        <FolderOpen className="h-10 w-10 text-[#6f7f9f]" />
       </div>
       <div className="text-center">
-        <h3 className="text-xl font-semibold text-gray-800">Workspace ist leer</h3>
-        <p className="text-sm text-gray-400 mt-1 max-w-xs">
+        <h3 className="text-xl font-semibold text-white">Workspace ist leer</h3>
+        <p className="mt-1 max-w-xs text-sm text-[#94a3c3]">
           Erstelle deinen ersten Space, um Projekte und Aufgaben zu verwalten.
         </p>
       </div>
@@ -178,12 +175,12 @@ function EmptyWorkspace({ onCreateSpace }: { onCreateSpace: () => void }) {
 function ComingSoon({ view }: { view: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4">
-      <div className="h-16 w-16 rounded-2xl bg-gray-100 flex items-center justify-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-[#2b3a58] bg-[#17233a]">
         <span className="text-2xl">{view === "gantt" ? "📅" : "📊"}</span>
       </div>
       <div className="text-center">
-        <h3 className="text-lg font-semibold text-gray-800 capitalize">{view} View</h3>
-        <p className="text-sm text-gray-400 mt-1">Coming soon.</p>
+        <h3 className="text-lg font-semibold text-white capitalize">{view} View</h3>
+        <p className="mt-1 text-sm text-[#94a3c3]">Coming soon.</p>
       </div>
     </div>
   );

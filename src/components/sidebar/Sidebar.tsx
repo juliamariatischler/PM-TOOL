@@ -67,7 +67,7 @@ export function Sidebar({
       const resizeState = resizeStateRef.current;
       if (!resizeState) return;
       const nextWidth = resizeState.startWidth + (event.clientX - resizeState.startX);
-      setSidebarWidth(Math.min(420, Math.max(240, nextWidth)));
+      setSidebarWidth(Math.min(504, Math.max(288, nextWidth)));
     }
 
     function handlePointerUp() {
@@ -135,7 +135,7 @@ export function Sidebar({
 
   if (sidebarCollapsed) {
     return (
-      <aside className="flex h-full w-12 flex-col items-center gap-4 border-r border-gray-200 bg-[#1a1f2e] py-3">
+      <aside className="flex h-full w-12 flex-col items-center gap-4 border-r border-[#283754] bg-[#0f1728] py-3">
         <button onClick={toggleSidebar} className="text-gray-400 hover:text-white">
           <PanelLeft className="h-5 w-5" />
         </button>
@@ -162,14 +162,14 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="relative flex h-full flex-col border-r border-gray-700 bg-[#1a1f2e] text-gray-300" style={{ width: sidebarWidth }}>
-        <div className="border-b border-gray-700 px-4 py-3">
+      <aside className="relative flex h-full flex-col border-r border-[#283754] bg-[#0f1728] text-[#c8d3eb]" style={{ width: sidebarWidth }}>
+        <div className="border-b border-[#283754] px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded bg-[#00B050]">
                 <Zap className="h-3.5 w-3.5 text-white" />
               </div>
-              <span className="text-sm font-semibold text-white">PM Tool</span>
+              <span className="text-base font-semibold text-white">PM Tool</span>
             </div>
             <button onClick={toggleSidebar} className="text-gray-500 hover:text-white">
               <PanelLeftClose className="h-4 w-4" />
@@ -179,11 +179,11 @@ export function Sidebar({
 
         <button
           onClick={() => setCommandOpen(true)}
-          className="mx-3 mt-3 flex items-center gap-2 rounded-md bg-gray-700/50 px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-700"
+          className="mx-3 mt-3 flex items-center gap-2 rounded-md border border-[#2b3a58] bg-[#17233a] px-3 py-2 text-sm text-[#b7c4dd] hover:bg-[#223150]"
         >
           <Search className="h-3.5 w-3.5" />
           <span>Search</span>
-          <kbd className="ml-auto rounded bg-gray-600 px-1.5 py-0.5 text-[10px]">⌘K</kbd>
+          <kbd className="ml-auto rounded bg-[#2b3a58] px-1.5 py-0.5 text-[10px] text-[#d4def5]">⌘K</kbd>
         </button>
 
         <nav className="mt-3 space-y-0.5 px-2">
@@ -212,11 +212,11 @@ export function Sidebar({
           <NavItem icon={<Layout className="h-4 w-4" />} label="Dashboards" />
         </nav>
 
-        <div className="mx-3 my-3 border-t border-gray-700" />
+        <div className="mx-3 my-3 border-t border-[#283754]" />
 
         <div className="flex-1 overflow-y-auto px-2 pb-4">
           <div className="mb-1 flex items-center justify-between px-2">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">Spaces</span>
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-[#7f91b8]">Spaces</span>
             <button onClick={onCreateSpace} className="text-gray-500 hover:text-white">
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -293,7 +293,7 @@ export function Sidebar({
           ))}
         </div>
 
-        <div className="border-t border-gray-700 p-3">
+        <div className="border-t border-[#283754] p-3">
           <div className="mb-3 space-y-0.5">
             <NavItem icon={<Archive className="h-4 w-4" />} label="Archiviert" onClick={() => openTaskView({ lifecycle: "archived" })} />
             <NavItem icon={<Trash2 className="h-4 w-4" />} label="Papierkorb" onClick={() => openTaskView({ lifecycle: "deleted" })} />
@@ -336,6 +336,7 @@ export function Sidebar({
       />
 
       <EditFolderDialog
+        key={editingFolder?.id ?? "closed-edit-folder"}
         open={editingFolder !== null}
         folder={editingFolder}
         onClose={() => setEditingFolder(null)}
@@ -343,6 +344,7 @@ export function Sidebar({
       />
 
       <MoveFolderDialog
+        key={movingFolder?.id ?? "closed-move-folder"}
         open={movingFolder !== null}
         folder={movingFolder}
         spaces={spaces}
@@ -351,6 +353,7 @@ export function Sidebar({
       />
 
       <EditProjectDialog
+        key={editingProject?.id ?? "closed-edit-project"}
         open={editingProject !== null}
         project={editingProject}
         onClose={() => setEditingProject(null)}
@@ -358,6 +361,7 @@ export function Sidebar({
       />
 
       <MoveProjectDialog
+        key={movingProject?.id ?? "closed-move-project"}
         open={movingProject !== null}
         project={movingProject}
         spaces={spaces}
@@ -370,7 +374,7 @@ export function Sidebar({
 
 function NavItem({ icon, label, badge, onClick }: { icon: React.ReactNode; label: string; badge?: number; onClick?: () => void }) {
   return (
-    <button onClick={onClick} className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-gray-400 transition-colors hover:bg-gray-700/50 hover:text-white">
+    <button onClick={onClick} className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-[#b7c4dd] transition-colors hover:bg-[#223150] hover:text-white">
       {icon}
       <span>{label}</span>
       {badge ? (
@@ -427,13 +431,13 @@ function SpaceItem({
             onToggle();
             onSelectSpace();
           }}
-          className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-gray-700/50"
+          className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-2 text-sm hover:bg-[#223150]"
         >
-          <span className="text-gray-500 group-hover:text-gray-300">
+          <span className="text-[#7282a5] group-hover:text-[#b7c4dd]">
             {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </span>
           <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: space.color }} />
-          <span className="truncate text-sm font-medium text-gray-300 group-hover:text-white">{space.name}</span>
+          <span className="truncate text-sm font-semibold text-[#d4def5] group-hover:text-white">{space.name}</span>
         </button>
         <button
           onClick={onCreateFolder}
@@ -454,7 +458,7 @@ function SpaceItem({
       </div>
 
       {expanded ? (
-        <div className="ml-3 border-l border-gray-700 pl-2">
+        <div className="ml-3 border-l border-[#283754] pl-2">
           {space.folders.map((folder) => (
             <FolderItem
               key={folder.id}
@@ -476,7 +480,7 @@ function SpaceItem({
           {space.folders.length === 0 ? (
             <button
               onClick={onCreateFolder}
-              className="mt-1 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-700/50 hover:text-gray-200"
+              className="mt-1 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-[#8393b6] hover:bg-[#223150] hover:text-[#d4def5]"
             >
               <Plus className="h-3 w-3" />
               Folder anlegen
@@ -520,13 +524,13 @@ function FolderItem({
       <div className="group flex items-center">
         <button
           onClick={onToggle}
-          className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-gray-700/50"
+          className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-2 text-sm hover:bg-[#223150]"
         >
           <span className="text-gray-600">
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           </span>
-          <Folder className="h-3.5 w-3.5 text-gray-500 group-hover:text-gray-300" />
-          <span className="truncate text-gray-400 group-hover:text-gray-200">{folder.name}</span>
+          <Folder className="h-3.5 w-3.5 text-[#7282a5] group-hover:text-[#b7c4dd]" />
+          <span className="truncate text-[#b7c4dd] group-hover:text-white">{folder.name}</span>
         </button>
         <button
           onClick={onCreateProject}
@@ -559,21 +563,21 @@ function FolderItem({
       </div>
 
       {expanded ? (
-        <div className="ml-3 border-l border-gray-700/50 pl-2">
+        <div className="ml-3 border-l border-[#283754]/80 pl-2">
           {folder.projects.map((project) => (
             <div key={project.id} className="group flex items-center">
               <button
                 onClick={() => onSelectProject(project.id)}
                 className={cn(
-                "flex flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-gray-700/50",
-                selectedProjectId === project.id && "bg-gray-700/60 text-white"
+                "flex flex-1 items-center gap-1.5 rounded-md px-2 py-2 text-sm hover:bg-[#223150]",
+                selectedProjectId === project.id && "bg-[#24406d] text-white"
               )}
             >
                 <span className="h-2 w-2 flex-shrink-0 rounded-sm" style={{ backgroundColor: project.color }} />
                 <span
                   className={cn(
                     "truncate",
-                    selectedProjectId === project.id ? "text-white" : "text-gray-400 group-hover:text-gray-200"
+                    selectedProjectId === project.id ? "text-white" : "text-[#aab8d3] group-hover:text-white"
                   )}
                 >
                   {project.name}
@@ -605,7 +609,7 @@ function FolderItem({
 
           <button
             onClick={onCreateProject}
-            className="mt-1 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-gray-700/50 hover:text-gray-200"
+            className="mt-1 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-[#8393b6] hover:bg-[#223150] hover:text-[#d4def5]"
           >
             <Plus className="h-3 w-3" />
             Projekt anlegen
@@ -775,14 +779,9 @@ function EditProjectDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState("#6366f1");
+  const [name, setName] = useState(project?.name ?? "");
+  const [color, setColor] = useState(project?.color ?? "#6366f1");
   const [saving, setSaving] = useState(false);
-
-  React.useEffect(() => {
-    setName(project?.name ?? "");
-    setColor(project?.color ?? "#6366f1");
-  }, [project]);
 
   async function handleSave() {
     if (!project || !name.trim()) return;
@@ -861,13 +860,9 @@ function MoveProjectDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [folderId, setFolderId] = useState("");
+  const [folderId, setFolderId] = useState(project?.folderId ?? "");
   const [saving, setSaving] = useState(false);
   const allFolders = spaces.flatMap((space) => space.folders.map((folder) => ({ ...folder, spaceName: space.name })));
-
-  React.useEffect(() => {
-    setFolderId(project?.folderId ?? "");
-  }, [project]);
 
   async function handleMove() {
     if (!project || !folderId) return;
@@ -936,12 +931,8 @@ function EditFolderDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(folder?.name ?? "");
   const [saving, setSaving] = useState(false);
-
-  React.useEffect(() => {
-    setName(folder?.name ?? "");
-  }, [folder]);
 
   async function handleSave() {
     if (!folder || !name.trim()) return;
@@ -1007,12 +998,8 @@ function MoveFolderDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [spaceId, setSpaceId] = useState("");
+  const [spaceId, setSpaceId] = useState(folder?.spaceId ?? "");
   const [saving, setSaving] = useState(false);
-
-  React.useEffect(() => {
-    setSpaceId(folder?.spaceId ?? "");
-  }, [folder]);
 
   async function handleMove() {
     if (!folder || !spaceId) return;

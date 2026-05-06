@@ -101,7 +101,7 @@ export function BoardView() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-full gap-3 overflow-x-auto p-4">
+      <div className="flex h-full gap-3 overflow-x-auto bg-[#111a2c] p-4">
         {STATUSES.map((status) => (
           <KanbanColumn
             key={status}
@@ -129,14 +129,14 @@ function KanbanColumn({
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
-    <div className="flex w-72 flex-shrink-0 flex-col rounded-xl border border-gray-200 bg-gray-50">
-      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2.5">
+    <div className="flex w-72 flex-shrink-0 flex-col rounded-xl border border-[#2b3a58] bg-[#17233a]">
+      <div className="flex items-center justify-between border-b border-[#2b3a58] px-3 py-3">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
-          <span className="text-sm font-semibold text-gray-700">{cfg.label}</span>
-          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-400">{tasks.length}</span>
+          <span className="text-sm font-semibold text-white">{cfg.label}</span>
+          <span className="rounded-md bg-[#0f1728] px-2 py-0.5 text-xs font-semibold text-[#94a3c3]">{tasks.length}</span>
         </div>
-        <button className="text-gray-400 hover:text-gray-600">
+        <button className="text-[#7f91b8] hover:text-white">
           <MoreHorizontal className="h-4 w-4" />
         </button>
       </div>
@@ -153,8 +153,8 @@ function KanbanColumn({
         ))}
       </div>
 
-      <div className="border-t border-gray-200 p-2">
-        <button className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-[#00B050]">
+      <div className="border-t border-[#2b3a58] p-2">
+        <button className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium text-[#94a3c3] hover:bg-[#223150] hover:text-[#8ff0ba]">
           <Plus className="h-3.5 w-3.5" />
           Add task
         </button>
@@ -184,14 +184,14 @@ function TaskCard({ task, onOpen, isDragging = false }: { task: Task; onOpen: ()
     <div
       onClick={onOpen}
       className={cn(
-        "cursor-pointer rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-[#00B050]/40 hover:shadow-sm",
+        "cursor-pointer rounded-lg border border-[#2b3a58] bg-[#111a2c] p-3 transition-all hover:border-[#00B050]/50 hover:bg-[#1b2944]",
         isDragging && "rotate-1 shadow-xl"
       )}
     >
-      <p className="mb-2 line-clamp-2 text-sm leading-snug text-gray-800">{task.title}</p>
+      <p className="mb-2 line-clamp-2 text-sm font-medium leading-snug text-[#e7edf9]">{task.title}</p>
 
       {task.dueDate ? (
-        <p className={cn("mb-2 text-xs", overdue ? "text-red-500" : "text-gray-400")}>{formatDate(task.dueDate)}</p>
+        <p className={cn("mb-2 text-xs", overdue ? "text-red-300" : "text-[#94a3c3]")}>{formatDate(task.dueDate)}</p>
       ) : null}
 
       <div className="flex items-center justify-between">
@@ -210,7 +210,7 @@ function TaskCard({ task, onOpen, isDragging = false }: { task: Task; onOpen: ()
         {task.assignees.length > 0 ? (
           <div className="flex -space-x-2">
             {task.assignees.slice(0, 3).map((assignee) => (
-              <Avatar key={assignee.id} className="h-6 w-6 border border-white">
+              <Avatar key={assignee.id} className="h-6 w-6 border border-[#111a2c]">
                 <AvatarFallback className="text-[9px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
                   {getInitials(assignee.name)}
                 </AvatarFallback>
@@ -221,7 +221,7 @@ function TaskCard({ task, onOpen, isDragging = false }: { task: Task; onOpen: ()
       </div>
 
       {task.subtasks.length > 0 ? (
-        <div className="mt-2 text-xs text-gray-400">
+        <div className="mt-2 text-xs text-[#94a3c3]">
           {task.subtasks.filter((subtask) => subtask.status === "Completed").length}/{task.subtasks.length} subtasks
         </div>
       ) : null}

@@ -68,9 +68,9 @@ export function TaskDetailPanel() {
   const [microsoftStatus, setMicrosoftStatus] = useState<MicrosoftConnectionStatus | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [now, setNow] = useState(0);
-  const [topSectionHeight, setTopSectionHeight] = useState(170);
-  const [actionItemsHeight, setActionItemsHeight] = useState(180);
-  const [panelWidth, setPanelWidth] = useState(880);
+  const [topSectionHeight, setTopSectionHeight] = useState(204);
+  const [actionItemsHeight, setActionItemsHeight] = useState(216);
+  const [panelWidth, setPanelWidth] = useState(1056);
   const [fullWidth, setFullWidth] = useState(false);
   const [isCommentComposing, setIsCommentComposing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -141,7 +141,7 @@ export function TaskDetailPanel() {
     const textarea = descriptionRef.current;
     if (!textarea) return;
 
-    const nextHeight = Math.min(520, Math.max(120, textarea.scrollHeight));
+    const nextHeight = Math.min(624, Math.max(144, textarea.scrollHeight));
     setActionItemsHeight((current) => {
       if (current >= nextHeight) {
         return current;
@@ -157,18 +157,18 @@ export function TaskDetailPanel() {
 
       if (resizeState.mode === "height") {
         const nextHeight = resizeState.startHeight + (event.clientY - resizeState.startY);
-        setTopSectionHeight(Math.min(320, Math.max(140, nextHeight)));
+        setTopSectionHeight(Math.min(384, Math.max(168, nextHeight)));
         return;
       }
 
       if (resizeState.mode === "action-items") {
         const nextHeight = resizeState.startHeight + (event.clientY - resizeState.startY);
-        setActionItemsHeight(Math.min(520, Math.max(120, nextHeight)));
+        setActionItemsHeight(Math.min(624, Math.max(144, nextHeight)));
         return;
       }
 
       const nextWidth = resizeState.startWidth - (event.clientX - resizeState.startX);
-      setPanelWidth(Math.min(window.innerWidth, Math.max(720, nextWidth)));
+      setPanelWidth(Math.min(window.innerWidth, Math.max(864, nextWidth)));
     }
 
     function handlePointerUp() {
@@ -512,26 +512,6 @@ export function TaskDetailPanel() {
     setApprovalDialogOpen(false);
   }
 
-  async function updateApproval(approvalId: string, patch: { status?: "pending" | "approved" | "rejected"; note?: string | null }) {
-    const response = await fetch(`/api/task-approvals/${approvalId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-
-    if (!response.ok) return;
-
-    const updated = (await response.json()) as TaskApproval;
-    setTask((prev) =>
-      prev
-        ? {
-          ...prev,
-          approvals: (prev.approvals ?? []).map((approval) => (approval.id === updated.id ? updated : approval)),
-        }
-        : prev
-    );
-  }
-
   async function addLink(input: { linkType: "internal" | "external"; linkedTaskId?: string; title: string; url?: string }) {
     if (!task) return;
 
@@ -553,23 +533,6 @@ export function TaskDetailPanel() {
         : prev
     );
     setLinkDialogOpen(false);
-  }
-
-  async function removeLink(linkId: string) {
-    const response = await fetch(`/api/task-links/${linkId}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) return;
-
-    setTask((prev) =>
-      prev
-        ? {
-          ...prev,
-          links: (prev.links ?? []).filter((link) => link.id !== linkId),
-        }
-        : prev
-    );
   }
 
   function getDisplayedActualTimeMinutes(currentTask: TaskDetailTask) {
@@ -647,6 +610,8 @@ export function TaskDetailPanel() {
   const completedSubtasks = task?.subtasks.filter((subtask) => subtask.status === "Completed").length ?? 0;
   const commentCount = activityItems.length;
   const documentCount = (task?.documents ?? []).length;
+  const approvalCount = (task?.approvals ?? []).length;
+  const linkCount = (task?.links ?? []).length;
   const taskDateLabel =
     task?.startDate || task?.dueDate
       ? [task.startDate ? formatDate(task.startDate) : null, task.dueDate ? formatDate(task.dueDate) : null].filter(Boolean).join(" - ")
@@ -858,14 +823,32 @@ export function TaskDetailPanel() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-1 gap-2 xl:grid-cols-[1.2fr_1.2fr_1.2fr_180px]">
+                <div className="mt-4 grid grid-cols-1 items-start gap-2 xl:grid-cols-[1.2fr_1.2fr_1.2fr_180px]">
                   <TaskMetaCard
                     label="Status"
                     value={
-                      <StatusSelector
-                        status={task.status}
-                        onChange={(status) => patchTask({ status })}
-                      />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <StatusSelector
+                          status={task.status}
+                          onChange={(status) => patchTask({ status })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setApprovalDialogOpen(true)}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-[#33415d] bg-[#111a2c] px-2 text-[11px] font-medium text-[#c8d3eb] hover:bg-[#223150] hover:text-white"
+                        >
+                          Freigaben
+                          <span className="rounded bg-[#223150] px-1 text-[10px] text-[#8ff0ba]">{approvalCount}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLinkDialogOpen(true)}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-[#33415d] bg-[#111a2c] px-2 text-[11px] font-medium text-[#c8d3eb] hover:bg-[#223150] hover:text-white"
+                        >
+                          Links
+                          <span className="rounded bg-[#223150] px-1 text-[10px] text-[#8ff0ba]">{linkCount}</span>
+                        </button>
+                      </div>
                     }
                   />
                   <TaskMetaCard
@@ -880,20 +863,20 @@ export function TaskDetailPanel() {
                   <TaskMetaCard
                     label="Datum"
                     value={
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium text-white">{taskDateLabel}</div>
-                        <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <div className="text-xs font-medium text-white">{taskDateLabel}</div>
+                        <div className="grid grid-cols-2 gap-1.5">
                           <input
                             type="date"
                             value={task.startDate ? task.startDate.slice(0, 10) : ""}
                             onChange={(event) => patchTask({ startDate: event.target.value || null })}
-                            className="h-9 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-sm text-[#d4def5] focus:outline-none"
+                            className="h-7 rounded-md border border-[#33415d] bg-[#111a2c] px-2 text-xs text-[#d4def5] focus:outline-none"
                           />
                           <input
                             type="date"
                             value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
                             onChange={(event) => patchTask({ dueDate: event.target.value || null })}
-                            className="h-9 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-sm text-[#d4def5] focus:outline-none"
+                            className="h-7 rounded-md border border-[#33415d] bg-[#111a2c] px-2 text-xs text-[#d4def5] focus:outline-none"
                           />
                         </div>
                       </div>
@@ -902,17 +885,17 @@ export function TaskDetailPanel() {
                   <TaskMetaCard
                     label="Weitere"
                     value={
-                      <div className="flex h-full flex-col justify-between gap-3">
-                        <div className="text-sm text-[#c8d3eb]">
+                      <div className="space-y-1.5">
+                        <div className="text-xs leading-snug text-[#c8d3eb]">
                           {completedSubtasks} von {task.subtasks.length} Schritte erledigt
                         </div>
                         <button
                           type="button"
                           onClick={() => setMenuOpen((current) => !current)}
-                          className="inline-flex items-center justify-between rounded-md border border-[#33415d] bg-[#111a2c] px-3 py-2 text-sm text-[#d4def5] hover:bg-[#223150]"
+                          className="inline-flex h-7 w-full items-center justify-between rounded-md border border-[#33415d] bg-[#111a2c] px-2 text-xs text-[#d4def5] hover:bg-[#223150]"
                         >
                           Mehr Optionen
-                          <ChevronDown className="h-4 w-4" />
+                          <ChevronDown className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     }
@@ -1191,85 +1174,6 @@ export function TaskDetailPanel() {
                 </div>
               </section>
 
-              <section className="mt-6 grid gap-6 xl:grid-cols-2">
-                <div className="rounded-[28px] border border-[#273754] bg-[#161f34] p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.18em] text-[#7f91b8]">Freigaben</div>
-                      <h3 className="mt-1 text-sm font-semibold text-white">Wer muss noch zustimmen?</h3>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => setApprovalDialogOpen(true)}>
-                      <Plus className="h-4 w-4" />
-                      Hinzufuegen
-                    </Button>
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    {(task.approvals ?? []).length > 0 ? (
-                      (task.approvals ?? []).map((approval) => (
-                        <div key={approval.id} className="rounded-2xl border border-[#293754] bg-[#111a2c] p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-medium text-white">{approval.approver.name}</div>
-                              <div className="text-xs text-[#90a0c4]">{approval.note || "Ohne Notiz"}</div>
-                            </div>
-                            <select
-                              value={approval.status}
-                              onChange={(event) => void updateApproval(approval.id, { status: event.target.value as "pending" | "approved" | "rejected" })}
-                              className="rounded-md border border-[#33415d] bg-[#1a2742] px-3 py-2 text-xs text-[#d4def5] focus:outline-none"
-                            >
-                              <option value="pending">offen</option>
-                              <option value="approved">freigegeben</option>
-                              <option value="rejected">abgelehnt</option>
-                            </select>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-[#33415d] px-4 py-5 text-sm text-[#90a0c4]">
-                        Noch kein Freigabeprozess angelegt.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-[28px] border border-[#273754] bg-[#161f34] p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.18em] text-[#7f91b8]">Abhaengigkeiten</div>
-                      <h3 className="mt-1 text-sm font-semibold text-white">Verknuepfte Aufgaben</h3>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => setLinkDialogOpen(true)}>
-                      <Plus className="h-4 w-4" />
-                      Hinzufuegen
-                    </Button>
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    {(task.links ?? []).length > 0 ? (
-                      (task.links ?? []).map((link) => (
-                        <div key={link.id} className="rounded-2xl border border-[#293754] bg-[#111a2c] p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-medium text-white">{link.title}</div>
-                              <div className="text-xs text-[#90a0c4]">{link.linkType === "internal" ? "Interner Task" : link.url}</div>
-                            </div>
-                            <button
-                              onClick={() => removeLink(link.id)}
-                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-100 hover:bg-red-500/20"
-                            >
-                              Entfernen
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-[#33415d] px-4 py-5 text-sm text-[#90a0c4]">
-                        Noch keine verlinkten Tasks.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
-
               <section className="mt-8">
                 <div className="text-center text-sm font-medium text-[#7f91b8]">Kommentare und Aktivitaet</div>
                 <div className="mt-4 space-y-4">
@@ -1436,41 +1340,66 @@ function getUserMentionInsertToken(user: User) {
 }
 
 function renderCommentWithMentions(comment: TaskComment) {
-  const mentionsByToken = new Map<string, User>();
+  const mentionCandidates = (comment.mentions ?? []).flatMap((mentionedUser) => {
+    const rawKeys = [
+      mentionedUser.name,
+      mentionedUser.name.split(/\s+/)[0] ?? "",
+      mentionedUser.email.split("@")[0] ?? "",
+    ].filter(Boolean);
 
-  for (const mentionedUser of comment.mentions ?? []) {
-    for (const token of getUserMentionKeys(mentionedUser)) {
-      mentionsByToken.set(token, mentionedUser);
+    return rawKeys.map((key) => ({
+      key,
+      normalizedKey: normalizeMentionToken(key),
+      mentionedUser,
+    }));
+  }).sort((left, right) => right.key.length - left.key.length);
+
+  const parts: React.ReactNode[] = [];
+  let index = 0;
+
+  while (index < comment.body.length) {
+    const atIndex = comment.body.indexOf("@", index);
+    if (atIndex === -1) {
+      parts.push(comment.body.slice(index));
+      break;
     }
-  }
 
-  return comment.body.split(/(@[a-zA-Z0-9._-]+)/g).map((part, index) => {
-    if (!part.startsWith("@")) {
-      return <React.Fragment key={`${comment.id}-${index}`}>{part}</React.Fragment>;
+    if (atIndex > index) {
+      parts.push(comment.body.slice(index, atIndex));
     }
 
-    const token = normalizeMentionToken(part.slice(1));
-    const mentionedUser = mentionsByToken.get(token);
+    const matchingCandidate = mentionCandidates.find((candidate) => {
+      const mentionText = comment.body.slice(atIndex + 1, atIndex + 1 + candidate.key.length);
+      return normalizeMentionToken(mentionText) === candidate.normalizedKey;
+    });
 
-    if (!mentionedUser) {
-      return <React.Fragment key={`${comment.id}-${index}`}>{part}</React.Fragment>;
+    if (!matchingCandidate) {
+      const rawMention = comment.body.slice(atIndex).match(/^@[a-zA-Z0-9._-]+/)?.[0] ?? "@";
+      parts.push(rawMention);
+      index = atIndex + rawMention.length;
+      continue;
     }
 
-    return (
+    parts.push(
       <span
-        key={`${comment.id}-${index}`}
-        className="rounded-md bg-[#153b33] px-1.5 py-0.5 font-semibold text-[#88dfc5]"
+        key={`${comment.id}-${atIndex}`}
+        className="inline-flex rounded-md bg-[#0f6a52] px-1.5 py-0.5 font-semibold text-[#c8fff0] shadow-[0_0_0_1px_rgba(21,187,143,0.28)]"
       >
-        @{mentionedUser.name}
+        @{matchingCandidate.mentionedUser.name}
       </span>
     );
-  });
+    index = atIndex + 1 + matchingCandidate.key.length;
+  }
+
+  return parts.map((part, partIndex) => (
+    <React.Fragment key={`${comment.id}-body-${partIndex}`}>{part}</React.Fragment>
+  ));
 }
 
 function TaskMetaCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-[#2c3b58] bg-[#0f3d63] px-3 py-2.5">
-      <div className="mb-1 text-[11px] font-medium leading-none text-[#89a9d1]">{label}</div>
+    <div className="self-start rounded-lg border border-[#2c3b58] bg-[#0f3d63] px-2 py-1.5">
+      <div className="mb-1 text-[10px] font-medium leading-none text-[#89a9d1]">{label}</div>
       {value}
     </div>
   );
@@ -1806,11 +1735,11 @@ function StatusSelector({ status, onChange }: { status: string; onChange: (statu
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className="flex h-9 items-center gap-2 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-sm font-medium text-white"
+        className="flex h-7 items-center gap-1.5 rounded-md border border-[#33415d] bg-[#111a2c] px-2 text-xs font-medium text-white"
       >
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: config.color }} />
         {config.label}
-        <ChevronDown className="h-3.5 w-3.5 text-[#8da0c4]" />
+        <ChevronDown className="h-3 w-3 text-[#8da0c4]" />
       </button>
       {open ? (
         <>
@@ -1855,13 +1784,13 @@ function AssigneeSelector({
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-[36px] w-full items-center gap-2 rounded-md border border-[#33415d] bg-[#111a2c] px-3 text-left text-sm leading-none text-white hover:text-[#9ce0b8]"
+        className="flex min-h-7 w-full items-center gap-1.5 rounded-md border border-[#33415d] bg-[#111a2c] px-2 text-left text-xs leading-none text-white hover:text-[#9ce0b8]"
       >
         {assignees.length > 0 ? (
           <>
             <div className="flex -space-x-2">
               {assignees.slice(0, 3).map((assignee) => (
-                <Avatar key={assignee.id} className="h-6 w-6 border border-[#111a2c]">
+                <Avatar key={assignee.id} className="h-5 w-5 border border-[#111a2c]">
                   <AvatarFallback className="text-[9px]" style={{ backgroundColor: `${assignee.color}30`, color: assignee.color }}>
                     {getInitials(assignee.name)}
                   </AvatarFallback>

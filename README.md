@@ -15,7 +15,6 @@ A modern project management application inspired by Wrike. Built with Next.js 16
 | Drag & Drop | @dnd-kit/core + @dnd-kit/sortable |
 | Backend | Next.js Route Handlers |
 | Auth + Database | Supabase Auth + Postgres |
-| Mobile Shell | Capacitor 8 |
 
 ---
 
@@ -91,11 +90,6 @@ Demo logins created by the seed:
 | `npm run dev` | Start development server |
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
-| `npm run cap:sync` | Sync web assets/plugins to both native shells |
-| `npm run cap:sync:ios` | Sync only the iOS shell |
-| `npm run cap:sync:android` | Sync only the Android shell |
-| `npm run cap:open:ios` | Open the iOS project in Xcode |
-| `npm run cap:open:android` | Open the Android project in Android Studio |
 | `npm run db:seed` | Seed Supabase auth users and workspace data |
 
 ---
@@ -126,9 +120,6 @@ Demo logins created by the seed:
 ## Project Structure
 
 ```
-android/                    # Capacitor Android project
-ios/                        # Capacitor iOS project
-capacitor.config.ts         # Capacitor config
 src/
 ├── app/
 │   ├── api/               # REST API routes
@@ -167,14 +158,6 @@ supabase/
 scripts/
 └── seed-supabase.mjs      # Seeds auth users and workspace data
 ```
-
-## Mobile Notes
-
-This repo now follows a one-repo web + mobile structure with shared app code in `src/` and native shells in `ios/` and `android/`.
-
-Important: the current app uses Next.js route handlers plus Supabase. That means Capacitor cannot yet ship this as a simple static bundle without additional architecture work. See [docs/mobile-setup.md](docs/mobile-setup.md) for the exact constraints and workflow.
-
----
 
 ## Keyboard Shortcuts
 

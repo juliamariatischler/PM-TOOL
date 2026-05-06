@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireApiSessionUser } from "@/lib/auth";
-import { deleteTask, getTaskDetail, updateTask } from "@/lib/data";
+import { deleteTask, getTaskDetail, setTaskCreatorIfMissing, updateTask } from "@/lib/data";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireApiSessionUser())) {
+  const user = await requireApiSessionUser();
+  if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  const task = await getTaskDetail(id);
+  let task = await getTaskDetail(id);
   if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!task.createdById) {
+    task = await setTaskCreatorIfMissing(id, user.id);
+    if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   return NextResponse.json(task);
 }
 

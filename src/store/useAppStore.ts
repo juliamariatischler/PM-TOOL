@@ -49,7 +49,7 @@ export const useAppStore = create<AppState>((set) => ({
   selectedTaskId: null,
   taskDetailOpen: false,
   sidebarCollapsed: false,
-  sidebarWidth: 288,
+  sidebarWidth: 346,
   filters: { status: [], assigneeId: [], createdById: [], search: "", lifecycle: "active" },
   expandedTaskIds: new Set(),
   commandOpen: false,

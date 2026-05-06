@@ -1,6 +1,6 @@
 "use client";
 import React, { useMemo, useState } from "react";
-import { ChevronRight, ChevronDown, Plus, MoreHorizontal, X, ArrowRightLeft, Archive, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, X, ArrowRightLeft, Archive, RotateCcw, Trash2 } from "lucide-react";
 import { cn, STATUS_CONFIG, STATUSES, formatDate, isOverdue, getInitials, matchesTaskLifecycle } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -260,13 +260,13 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
 
   return (
     <>
-      <div className="flex h-full flex-1 flex-col overflow-hidden">
+      <div className="flex h-full flex-1 flex-col overflow-hidden bg-[#111a2c]">
         {filters.lifecycle === "deleted" ? (
-          <div className="flex items-center justify-between border-b border-red-100 bg-red-50/70 px-4 py-2 text-sm">
-            <span className="text-red-700">Papierkorbansicht. Tasks lassen sich hier wiederherstellen oder gesammelt leeren.</span>
+          <div className="flex items-center justify-between border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-sm">
+            <span className="text-red-100">Papierkorbansicht. Tasks lassen sich hier wiederherstellen oder gesammelt leeren.</span>
             <button
               onClick={handleEmptyTrash}
-              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+              className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-100 hover:bg-red-500/20"
             >
               Papierkorb leeren
             </button>
@@ -276,10 +276,10 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
         {visibleSections.length === 0 ? (
           <div className="flex h-full min-h-[320px] items-center justify-center p-8">
             <div className="max-w-md text-center">
-              <h3 className="text-lg font-semibold text-gray-800">
+              <h3 className="text-lg font-semibold text-white">
                 {isLifecycleView ? "Keine Tasks in dieser Ansicht" : "Noch kein Projekt vorhanden"}
               </h3>
-              <p className="mt-2 text-sm text-gray-400">
+              <p className="mt-2 text-sm text-[#94a3c3]">
                 {isLifecycleView
                   ? filters.lifecycle === "archived"
                     ? "Aktuell ist kein Task archiviert."
@@ -291,7 +291,7 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
         ) : (
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50">
+            <tr className="sticky top-0 z-10 border-b border-[#2b3a58] bg-[#17233a]">
               <th className="w-8 px-2 py-2.5 text-left">
                 <input type="checkbox" className="rounded border-gray-300" />
               </th>
@@ -300,7 +300,7 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
                 <th
                   key={column.key}
                   className={cn(
-                    "cursor-pointer whitespace-nowrap px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-800",
+                    "cursor-pointer whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[#94a3c3] hover:text-white",
                     column.width
                   )}
                 >
@@ -308,7 +308,7 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
                 </th>
               ))}
               <th className="px-2 py-2.5">
-                <button className="text-gray-400 hover:text-gray-600">
+                <button className="text-[#7f91b8] hover:text-white">
                   <Plus className="h-4 w-4" />
                 </button>
               </th>
@@ -346,13 +346,13 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
                     />
                   ))}
                   {filters.lifecycle === "active" ? (
-                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr className="border-b border-[#22304b] hover:bg-[#17233a]">
                       <td className="px-2 py-1.5" />
                       <td className="px-1" />
                       <td colSpan={COLUMNS.length + 1} className="px-3 py-1.5">
                         <button
                           onClick={() => setCreateProjectId(project.id)}
-                          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#00B050]"
+                          className="flex items-center gap-1.5 text-xs font-medium text-[#94a3c3] hover:text-[#8ff0ba]"
                         >
                           <Plus className="h-3.5 w-3.5" />
                           Add task
@@ -392,6 +392,7 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
       />
 
       <MoveTaskDialog
+        key={movingTask?.id ?? "closed-move-task"}
         open={movingTask !== null}
         task={movingTask}
         projects={allProjects}
@@ -589,23 +590,23 @@ function ProjectHeader({
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <tr className="cursor-pointer border-b border-gray-100 bg-gray-50/80" onClick={() => setCollapsed((current) => !current)}>
+    <tr className="cursor-pointer border-b border-[#2b3a58] bg-[#17233a]" onClick={() => setCollapsed((current) => !current)}>
       <td className="px-2 py-2" />
       <td className="px-1">
         {collapsed ? (
-          <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+          <ChevronRight className="h-3.5 w-3.5 text-[#7f91b8]" />
         ) : (
-          <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+          <ChevronDown className="h-3.5 w-3.5 text-[#7f91b8]" />
         )}
       </td>
       <td colSpan={COLUMNS.length + 1} className="px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: project.color }} />
-          <span className="text-xs font-semibold text-gray-700">{project.name}</span>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs font-semibold text-white">{project.name}</span>
+          <span className="text-xs text-[#94a3c3]">
             {folder.name} · {space.name}
           </span>
-          <span className="ml-1 rounded-full bg-gray-200 px-1.5 py-0.5 text-[10px] text-gray-600">
+          <span className="ml-1 rounded-md bg-[#0f1728] px-1.5 py-0.5 text-[10px] text-[#c8d3eb]">
             {taskCount}
           </span>
         </div>
@@ -644,10 +645,6 @@ function TaskRow({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
 
-  React.useEffect(() => {
-    setTitleDraft(task.title);
-  }, [task.title]);
-
   async function saveTitle() {
     const nextTitle = titleDraft.trim();
     if (!nextTitle) {
@@ -681,7 +678,7 @@ function TaskRow({
 
   return (
     <>
-      <tr className="group cursor-pointer border-b border-gray-100 hover:bg-blue-50/30" onClick={() => !editingTitle && onOpen()}>
+      <tr className="group cursor-pointer border-b border-[#22304b] hover:bg-[#17233a]" onClick={() => !editingTitle && onOpen()}>
         <td className="px-2 py-2" onClick={(event) => event.stopPropagation()}>
           <input type="checkbox" className="rounded border-gray-300 opacity-0 group-hover:opacity-100" />
         </td>
@@ -723,16 +720,17 @@ function TaskRow({
                   }
                 }}
                 autoFocus
-                className="w-full max-w-[240px] rounded border border-[#00B050] bg-white px-2 py-1 text-sm text-gray-800 focus:outline-none"
+                className="w-full max-w-[240px] rounded border border-[#00B050] bg-[#0f1728] px-2 py-1 text-sm text-white focus:outline-none"
               />
             ) : (
               <button
                 type="button"
                 onDoubleClick={(event) => {
                   event.stopPropagation();
+                  setTitleDraft(task.title);
                   setEditingTitle(true);
                 }}
-                className="max-w-[240px] truncate text-left text-sm text-gray-800 hover:text-[#00B050]"
+                className="max-w-[240px] truncate text-left text-sm font-medium text-[#e7edf9] hover:text-[#8ff0ba]"
                 title="Doppelklick zum Bearbeiten"
               >
                 {task.title}
@@ -749,7 +747,7 @@ function TaskRow({
               </span>
             ) : null}
             {hasSubtasks && (
-              <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-400">
+              <span className="ml-1 rounded-md bg-[#0f1728] px-1.5 py-0.5 text-[10px] text-[#94a3c3]">
                 {task.subtasks.length}
               </span>
             )}
@@ -771,11 +769,11 @@ function TaskRow({
         </td>
 
         <td className="w-28 px-3 py-2">
-          <span className="text-xs text-gray-500">{formatDate(task.startDate) || "—"}</span>
+          <span className="text-xs text-[#b7c4dd]">{formatDate(task.startDate) || "—"}</span>
         </td>
 
         <td className="w-28 px-3 py-2">
-          <span className={cn("text-xs", overdue ? "font-medium text-red-500" : "text-gray-500")}>
+          <span className={cn("text-xs", overdue ? "font-medium text-red-300" : "text-[#b7c4dd]")}>
             {formatDate(task.dueDate) || "—"}
           </span>
         </td>
@@ -793,17 +791,17 @@ function TaskRow({
         </td>
 
         <td className="w-20 px-3 py-2">
-          <span className="text-xs text-gray-500">{task.effort.toFixed(1)}h</span>
+          <span className="text-xs text-[#b7c4dd]">{task.effort.toFixed(1)}h</span>
         </td>
 
         <td className="w-24 px-3 py-2">
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-[#b7c4dd]">
             {task.plannedCost > 0 ? `$${task.plannedCost.toFixed(0)}` : "—"}
           </span>
         </td>
 
         <td className="w-40 px-3 py-2">
-          <span className="block max-w-[140px] truncate text-xs text-gray-400">{location}</span>
+          <span className="block max-w-[140px] truncate text-xs text-[#94a3c3]">{location}</span>
         </td>
 
         <td className="px-2 py-2" onClick={(event) => event.stopPropagation()}>
@@ -910,12 +908,8 @@ function MoveTaskDialog({
   onClose: () => void;
   onMove: (taskId: string, projectId: string) => Promise<void>;
 }) {
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(task?.projectId ?? "");
   const [saving, setSaving] = useState(false);
-
-  React.useEffect(() => {
-    setProjectId(task?.projectId ?? "");
-  }, [task]);
 
   async function handleMove() {
     if (!task || !projectId) return;
@@ -988,7 +982,7 @@ function AssigneeDropdown({
         onClick={() => setOpen((current) => !current)}
         className={cn(
           "flex items-center gap-1.5 rounded-md text-left hover:text-[#00B050]",
-          compact ? "min-h-6 text-xs text-gray-600" : "min-h-9 w-full border border-gray-200 px-3 py-2 text-sm text-gray-700"
+          compact ? "min-h-6 text-xs text-[#c8d3eb]" : "min-h-9 w-full border border-[#33415d] bg-[#0f1728] px-3 py-2 text-sm text-[#e7edf9]"
         )}
       >
         {assignees.length > 0 ? (
@@ -1007,20 +1001,20 @@ function AssigneeDropdown({
             </span>
           </>
         ) : (
-          <span className={compact ? "text-gray-300" : "text-gray-400"}>{placeholder}</span>
+          <span className={compact ? "text-[#6f7f9f]" : "text-[#8393b6]"}>{placeholder}</span>
         )}
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 min-w-[190px] rounded-xl border border-gray-200 bg-white py-1 shadow-xl">
+          <div className="absolute left-0 top-full z-20 mt-1 min-w-[190px] rounded-xl border border-[#33415d] bg-[#17233a] py-1 shadow-xl">
             <button
               onClick={() => {
                 onChange([]);
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:bg-gray-50"
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-[#94a3c3] hover:bg-[#223150]"
             >
               <X className="h-3.5 w-3.5" />
               Unassigned
@@ -1036,8 +1030,8 @@ function AssigneeDropdown({
                   );
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50",
-                  assigneeIds.includes(user.id) && "bg-green-50"
+                  "flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-[#223150]",
+                  assigneeIds.includes(user.id) && "bg-[#10301f]"
                 )}
               >
                 <Avatar className="h-6 w-6">
@@ -1045,7 +1039,7 @@ function AssigneeDropdown({
                     {getInitials(user.name)}
                   </AvatarFallback>
                 </Avatar>
-                <span className="truncate text-gray-700">{user.name}</span>
+                <span className="truncate text-[#e7edf9]">{user.name}</span>
               </button>
             ))}
           </div>
@@ -1072,7 +1066,7 @@ function StatusDropdown({ status, onSelect }: { status: string; onSelect: (statu
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+          <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-md border border-[#33415d] bg-[#17233a] py-1 shadow-lg">
             {STATUSES.map((candidate) => {
               const candidateConfig = STATUS_CONFIG[candidate];
               return (
@@ -1082,7 +1076,7 @@ function StatusDropdown({ status, onSelect }: { status: string; onSelect: (statu
                     onSelect(candidate);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[#e7edf9] hover:bg-[#223150]"
                 >
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: candidateConfig.color }} />
                   {candidateConfig.label}
