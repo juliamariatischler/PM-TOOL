@@ -16,6 +16,7 @@ interface AppState {
   filters: TaskFilters;
   expandedTaskIds: Set<string>;
   commandOpen: boolean;
+  starredTaskIds: Set<string>;
 
   // Actions
   setSpaces: (spaces: Space[]) => void;
@@ -31,6 +32,7 @@ interface AppState {
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
   toggleTaskExpand: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
+  toggleStarred: (taskId: string) => void;
 
   // Optimistic task updates
   updateTaskOptimistic: (taskId: string, patch: Partial<Task>) => void;
@@ -53,6 +55,11 @@ export const useAppStore = create<AppState>((set) => ({
   filters: { status: [], assigneeId: [], createdById: [], search: "", lifecycle: "active" },
   expandedTaskIds: new Set(),
   commandOpen: false,
+  starredTaskIds: new Set<string>(
+    typeof window !== "undefined"
+      ? (JSON.parse(localStorage.getItem("pm-starred-tasks") ?? "[]") as string[])
+      : []
+  ),
 
   setSpaces: (spaces) => set({ spaces }),
   setUsers: (users) => set({ users }),
@@ -77,6 +84,19 @@ export const useAppStore = create<AppState>((set) => ({
       return { expandedTaskIds: next };
     }),
   setCommandOpen: (open) => set({ commandOpen: open }),
+  toggleStarred: (taskId) =>
+    set((s) => {
+      const next = new Set(s.starredTaskIds);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pm-starred-tasks", JSON.stringify([...next]));
+      }
+      return { starredTaskIds: next };
+    }),
 
   updateTaskOptimistic: (taskId, patch) =>
     set((s) => ({

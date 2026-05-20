@@ -17,6 +17,7 @@ import {
   Play,
   Presentation,
   Square,
+  Star,
   Trash2,
   Send,
   ExternalLink,
@@ -52,6 +53,8 @@ export function TaskDetailPanel() {
     setFilter,
     selectProject,
     selectSpace,
+    starredTaskIds,
+    toggleStarred,
   } = useAppStore();
   const [task, setTask] = useState<TaskDetailTask | null>(null);
   const [loadingTask, setLoadingTask] = useState(false);
@@ -793,6 +796,13 @@ export function TaskDetailPanel() {
 
                   <div className="flex items-center gap-1.5 text-[#9aa7c3]">
                     <button
+                      onClick={() => toggleStarred(task.id)}
+                      className="rounded-md p-2 hover:bg-[#1f2b45] hover:text-white"
+                      title={starredTaskIds.has(task.id) ? "Markierung entfernen" : "Task markieren"}
+                    >
+                      <Star className={cn("h-4 w-4", starredTaskIds.has(task.id) && "fill-amber-400 text-amber-400")} />
+                    </button>
+                    <button
                       onClick={() => setFullWidth((current) => !current)}
                       className="rounded-md p-2 hover:bg-[#1f2b45] hover:text-white"
                     >
@@ -968,7 +978,7 @@ export function TaskDetailPanel() {
                     value={taskCreator?.name ?? "Unbekannt"}
                   />
                   <CompactMetaCard
-                    label="Faelligkeit"
+                    label="Fälligkeit"
                     value={taskDateLabel}
                   />
                   <CompactMetaCard
@@ -1020,12 +1030,12 @@ export function TaskDetailPanel() {
               <div className="flex flex-wrap items-center gap-2 border-t border-[#263451] px-7 py-3 text-sm text-[#afbdd8]">
                 <TaskActionChip
                   icon={<CheckSquare className="h-4 w-4" />}
-                  label="Schritt hinzufuegen"
+                  label="Schritt hinzufügen"
                   onClick={() => setSubtaskOpen((current) => !current)}
                 />
                 <TaskActionChip icon={<Paperclip className="h-4 w-4" />} label="Datei anhangen" onClick={() => setDocumentDialogOpen(true)} />
                 <TaskActionChip icon={<CheckSquare className="h-4 w-4" />} label="Freigabe anfragen" onClick={() => setApprovalDialogOpen(true)} />
-                <TaskActionChip icon={<Link2 className="h-4 w-4" />} label="Task verknuepfen" onClick={() => setLinkDialogOpen(true)} />
+                <TaskActionChip icon={<Link2 className="h-4 w-4" />} label="Task verknüpfen" onClick={() => setLinkDialogOpen(true)} />
                 <span className="mx-1 h-5 w-px bg-[#324160]" />
                 <TaskActionChip
                   icon={<Play className="h-4 w-4" />}
@@ -1038,7 +1048,7 @@ export function TaskDetailPanel() {
             <div className="border-b border-[#263451] px-7 py-2">
               <button
                 type="button"
-                aria-label="Bereichsgroesse anpassen"
+                aria-label="Bereichsgröße anpassen"
                 onPointerDown={startResizing}
                 className="group flex w-full cursor-row-resize items-center justify-center"
               >
@@ -1114,7 +1124,7 @@ export function TaskDetailPanel() {
                 <div className="mt-2 flex justify-center">
                   <button
                     type="button"
-                    aria-label="Action-Items-Hoehe anpassen"
+                    aria-label="Action-Items-Höhe anpassen"
                     onPointerDown={startActionItemsResizing}
                     className="group flex w-full cursor-row-resize items-center justify-center py-1"
                   >
@@ -1297,7 +1307,7 @@ export function TaskDetailPanel() {
                     event.preventDefault();
                     void submitCommentFromKeyboard();
                   }}
-                  placeholder="Einen Kommentar hinzufuegen..."
+                  placeholder="Einen Kommentar hinzufügen..."
                   rows={comment.trim() ? 3 : 1}
                   className="w-full resize-none bg-transparent text-base text-[#e7edf9] placeholder:text-[#6f7f9f] focus:outline-none"
                 />
@@ -1316,7 +1326,7 @@ export function TaskDetailPanel() {
                     </button>
                     {mentionMenuOpen ? (
                       <div className="absolute bottom-10 left-7 z-30 min-w-[260px] rounded-xl border border-[#33415d] bg-[#1a2742] p-2 shadow-xl">
-                        <div className="px-2 pb-2 text-xs uppercase tracking-[0.14em] text-[#7f91b8]">Person auswaehlen</div>
+                        <div className="px-2 pb-2 text-xs uppercase tracking-[0.14em] text-[#7f91b8]">Person auswählen</div>
                         <div className="max-h-56 overflow-y-auto">
                           {users.map((user) => (
                             <button
@@ -1641,7 +1651,7 @@ function AddApprovalDialog({
               onChange={(event) => setApproverUserId(event.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
             >
-              <option value="">Bitte waehlen</option>
+              <option value="">Bitte wählen</option>
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.name}
@@ -1655,7 +1665,7 @@ function AddApprovalDialog({
               value={note}
               onChange={(event) => setNote(event.target.value)}
               rows={3}
-              placeholder="Optional: was genau geprueft werden soll"
+              placeholder="Optional: was genau geprüft werden soll"
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
             />
           </div>
@@ -1745,7 +1755,7 @@ function AddLinkDialog({
                 }}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#00B050] focus:outline-none"
               >
-                <option value="">Bitte waehlen</option>
+                <option value="">Bitte wählen</option>
                 {tasks.map((task) => (
                   <option key={task.id} value={task.id}>
                     {task.title}

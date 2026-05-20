@@ -227,7 +227,7 @@ export function DashboardView({ currentUserId }: { currentUserId: string }) {
           <div>
             <h1 className="text-2xl font-semibold text-white">{activePage?.title ?? "Dashboards"}</h1>
             <p className="mt-1 text-sm text-[#8ea0c4]">
-              {selectedSpaceId ? "Flexibles Dashboard fuer den gewaehlten Space" : "Flexibles Workspace-Dashboard"}
+              {selectedSpaceId ? "Flexibles Dashboard für den gewählten Space" : "Flexibles Workspace-Dashboard"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -357,7 +357,7 @@ function DashboardBlockPanel({
           >
             <Columns3 className="h-3.5 w-3.5" />
           </button>
-          <button title="Loeschen" onClick={() => onDelete(block.id)} className="rounded p-1.5 text-[#7f91b8] hover:bg-red-500/10 hover:text-red-300">
+          <button title="Löschen" onClick={() => onDelete(block.id)} className="rounded p-1.5 text-[#7f91b8] hover:bg-red-500/10 hover:text-red-300">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -673,7 +673,7 @@ function getBlockTitle(blockType: DashboardBlockType) {
   if (blockType === "task_view") return "Aufgabenansicht";
   if (blockType === "shortcuts") return "Shortcuts";
   if (blockType === "links") return "Links";
-  if (blockType === "stats") return "Ueberblick";
+  if (blockType === "stats") return "Überblick";
   return "Notiz";
 }
 

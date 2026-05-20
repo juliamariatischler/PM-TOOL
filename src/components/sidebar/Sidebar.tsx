@@ -113,10 +113,12 @@ export function Sidebar({
     assigneeIds = [],
     createdByIds = [],
     lifecycle = "active",
+    starred,
   }: {
     assigneeIds?: string[];
     createdByIds?: string[];
     lifecycle?: "active" | "archived" | "deleted" | "all";
+    starred?: boolean;
   }) {
     setActiveView("table");
     selectSpace(null);
@@ -126,6 +128,7 @@ export function Sidebar({
     setFilter("status", []);
     setFilter("search", "");
     setFilter("lifecycle", lifecycle);
+    setFilter("starred", starred);
   }
 
   function startSidebarResize(event: React.PointerEvent<HTMLButtonElement>) {
@@ -208,7 +211,7 @@ export function Sidebar({
             label="Created by me"
             onClick={() => openTaskView({ createdByIds: [currentUserId] })}
           />
-          <NavItem icon={<Star className="h-4 w-4" />} label="Starred" />
+          <NavItem icon={<Star className="h-4 w-4" />} label="Starred" onClick={() => openTaskView({ starred: true, lifecycle: "all" })} />
           <NavItem icon={<BarChart2 className="h-4 w-4" />} label="Reports" />
           <NavItem
             icon={<Layout className="h-4 w-4" />}
@@ -252,7 +255,7 @@ export function Sidebar({
                 selectProject(null);
               }}
               onDeleteSpace={async () => {
-                const confirmed = window.confirm(`Space "${space.name}" wirklich loeschen? Alle Folder, Projekte und Tasks darin werden mitgeloescht.`);
+                const confirmed = window.confirm(`Space "${space.name}" wirklich löschen? Alle Folder, Projekte und Tasks darin werden mitgelöscht.`);
                 if (!confirmed) return;
 
                 const response = await fetch(`/api/spaces/${space.id}`, { method: "DELETE" });
@@ -273,7 +276,7 @@ export function Sidebar({
               onEditProject={(project) => setEditingProject(project)}
               onMoveProject={(project) => setMovingProject(project)}
               onDeleteProject={async (project) => {
-                const confirmed = window.confirm(`Projekt "${project.name}" wirklich loeschen? Alle Tasks darin werden mitgeloescht.`);
+                const confirmed = window.confirm(`Projekt "${project.name}" wirklich löschen? Alle Tasks darin werden mitgelöscht.`);
                 if (!confirmed) return;
 
                 const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
@@ -286,7 +289,7 @@ export function Sidebar({
                 await onReload();
               }}
               onDeleteFolder={async (folder) => {
-                const confirmed = window.confirm(`Folder "${folder.name}" wirklich loeschen? Alle Projekte und Tasks darin werden mitgeloescht.`);
+                const confirmed = window.confirm(`Folder "${folder.name}" wirklich löschen? Alle Projekte und Tasks darin werden mitgelöscht.`);
                 if (!confirmed) return;
 
                 const response = await fetch(`/api/folders/${folder.id}`, { method: "DELETE" });
@@ -459,7 +462,7 @@ function SpaceItem({
             void onDeleteSpace();
           }}
           className="opacity-0 transition-opacity group-hover:opacity-100 text-gray-500 hover:text-red-400"
-          title="Space loeschen"
+          title="Space löschen"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -564,7 +567,7 @@ function FolderItem({
         <button
           onClick={onDeleteFolder}
           className="opacity-0 transition-opacity group-hover:opacity-100 text-gray-500 hover:text-red-400"
-          title="Folder loeschen"
+          title="Folder löschen"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -608,7 +611,7 @@ function FolderItem({
               <button
                 onClick={() => onDeleteProject({ id: project.id, name: project.name })}
                 className="opacity-0 transition-opacity group-hover:opacity-100 text-gray-500 hover:text-red-400"
-                title="Projekt loeschen"
+                title="Projekt löschen"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

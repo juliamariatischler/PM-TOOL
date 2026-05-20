@@ -139,6 +139,7 @@ export interface TaskFilters {
   createdById: string[];
   search: string;
   lifecycle: "active" | "archived" | "deleted" | "all";
+  starred?: boolean;
 }
 
 export type DashboardBlockType = "text" | "shortcuts" | "links" | "task_view" | "stats";

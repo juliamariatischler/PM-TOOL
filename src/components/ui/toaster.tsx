@@ -71,7 +71,7 @@ export function Toaster() {
             type="button"
             onClick={() => setItems((current) => current.filter((candidate) => candidate.id !== item.id))}
             className="rounded p-1 text-current opacity-60 hover:bg-white/10 hover:opacity-100"
-            aria-label="Meldung schliessen"
+            aria-label="Meldung schließen"
           >
             <X className="h-3.5 w-3.5" />
           </button>

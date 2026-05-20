@@ -77,7 +77,7 @@ export async function POST(req: Request) {
           pageId: page.id,
           blockType: "links",
           title: "Links",
-          content: { links: [{ label: "Projektuebersicht", url: "/" }] },
+          content: { links: [{ label: "Projektübersicht", url: "/" }] },
           position: 2,
         }),
         createPageBlock({
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
         createPageBlock({
           pageId: page.id,
           blockType: "stats",
-          title: "Ueberblick",
+          title: "Überblick",
           width: "full",
           position: 4,
         }),

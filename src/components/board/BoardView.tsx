@@ -117,8 +117,8 @@ export function BoardView({ onReload }: { onReload: () => Promise<void> | void }
   async function handleCreateTask(status: string, title: string) {
     if (!targetProjectId) {
       showToast({
-        title: "Kein Projekt ausgewaehlt",
-        message: "Lege zuerst ein Projekt an oder waehle eines in der Sidebar.",
+        title: "Kein Projekt ausgewählt",
+        message: "Lege zuerst ein Projekt an oder wähle eines in der Sidebar.",
         variant: "error",
       });
       return;
@@ -284,7 +284,7 @@ function KanbanColumn({
             type="button"
             onClick={() => setDraftOpen(true)}
             disabled={!canCreate}
-            title={canCreate ? "Task in dieser Spalte erstellen" : "Erstelle oder waehle zuerst ein Projekt."}
+            title={canCreate ? "Task in dieser Spalte erstellen" : "Erstelle oder wähle zuerst ein Projekt."}
             className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium text-[#94a3c3] hover:bg-[#223150] hover:text-[#8ff0ba] disabled:cursor-not-allowed disabled:text-[#53637e] disabled:hover:bg-transparent"
           >
             <Plus className="h-3.5 w-3.5" />

@@ -70,7 +70,7 @@ export function Toolbar({ onReload }: { onReload: () => Promise<void> | void }) 
         <button
           type="button"
           disabled
-          title="Neue Views werden ueber das Dashboard gespeichert."
+          title="Neue Views werden über das Dashboard gespeichert."
           className="flex cursor-not-allowed items-center gap-1 px-3 py-3 text-sm text-[#53637e]"
         >
           <Plus className="h-3.5 w-3.5" />

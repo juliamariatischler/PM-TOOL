@@ -34,6 +34,7 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
     selectedSpaceId,
     selectedProjectId,
     filters,
+    starredTaskIds,
     openTask,
     updateTaskOptimistic,
     addTaskOptimistic,
@@ -94,6 +95,7 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
         if (filters.createdById.length && !filters.createdById.includes(task.createdById ?? "")) return false;
         if (filters.search && !task.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
         if (!matchesTaskLifecycle(task, filters.lifecycle)) return false;
+        if (filters.starred && !starredTaskIds.has(task.id)) return false;
         return true;
       })
       .map((task) => ({ ...task, subtasks: filterTasks(task.subtasks) }));
