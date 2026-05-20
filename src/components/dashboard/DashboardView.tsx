@@ -65,11 +65,11 @@ export function DashboardView({ currentUserId }: { currentUserId: string }) {
     [spaces]
   );
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (signal?: AbortSignal) => {
     const scope = selectedSpaceId ? `?spaceId=${selectedSpaceId}` : "";
     const [pagesResponse, viewsResponse] = await Promise.all([
-      fetch(`/api/pages${scope}`),
-      fetch("/api/saved-task-views"),
+      fetch(`/api/pages${scope}`, { signal }),
+      fetch("/api/saved-task-views", { signal }),
     ]);
 
     const nextPages = pagesResponse.ok ? await pagesResponse.json() as DashboardPage[] : [];
@@ -81,27 +81,11 @@ export function DashboardView({ currentUserId }: { currentUserId: string }) {
   }, [selectedSpaceId]);
 
   useEffect(() => {
-    let cancelled = false;
-    const scope = selectedSpaceId ? `?spaceId=${selectedSpaceId}` : "";
-
-    Promise.all([
-      fetch(`/api/pages${scope}`),
-      fetch("/api/saved-task-views"),
-    ]).then(async ([pagesResponse, viewsResponse]) => {
-      if (cancelled) return;
-      const nextPages = pagesResponse.ok ? await pagesResponse.json() as DashboardPage[] : [];
-      const nextViews = viewsResponse.ok ? await viewsResponse.json() as SavedTaskView[] : [];
-      if (cancelled) return;
-      setPages(nextPages);
-      setSavedViews(nextViews);
-      setActivePageId((current) => nextPages.some((page) => page.id === current) ? current : nextPages[0]?.id ?? null);
-      setLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedSpaceId]);
+    const controller = new AbortController();
+    setLoading(true);
+    loadDashboard(controller.signal).catch(() => {});
+    return () => controller.abort();
+  }, [loadDashboard]);
 
   const activePage = pages.find((page) => page.id === activePageId) ?? null;
 
@@ -563,26 +547,97 @@ function LinksBlock({
       )
     : [];
 
-  async function addLink() {
-    const label = window.prompt("Link-Name");
-    if (!label) return;
-    const url = window.prompt("URL");
-    if (!url) return;
-    await onUpdate(block.id, { content: { ...block.content, links: [...links, { label, url }] } });
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+  const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState("");
+
+  function validateUrl(value: string) {
+    try {
+      const parsed = new URL(value.startsWith("http") ? value : `https://${value}`);
+      return ["https:", "http:"].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  }
+
+  async function confirmAdd() {
+    if (!label.trim()) return;
+    const normalized = url.startsWith("http") ? url : `https://${url}`;
+    if (!validateUrl(normalized)) {
+      setUrlError("Ungültige URL");
+      return;
+    }
+    await onUpdate(block.id, { content: { ...block.content, links: [...links, { label: label.trim(), url: normalized }] } });
+    setLabel("");
+    setUrl("");
+    setUrlError("");
+    setAdding(false);
+  }
+
+  async function removeLink(index: number) {
+    await onUpdate(block.id, { content: { ...block.content, links: links.filter((_, i) => i !== index) } });
   }
 
   return (
     <div className="space-y-2">
       {links.map((link, index) => (
-        <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-[#d4def5] hover:bg-[#17233a]">
-          <LinkIcon className="h-3.5 w-3.5 text-[#7f91b8]" />
-          {link.label}
-        </a>
+        <div key={`${link.url}-${index}`} className="group flex items-center gap-2">
+          <a href={link.url} target="_blank" rel="noreferrer" className="flex flex-1 items-center gap-2 rounded-md px-2 py-2 text-sm text-[#d4def5] hover:bg-[#17233a]">
+            <LinkIcon className="h-3.5 w-3.5 shrink-0 text-[#7f91b8]" />
+            <span className="truncate">{link.label}</span>
+          </a>
+          <button
+            onClick={() => removeLink(index)}
+            className="opacity-0 group-hover:opacity-100 rounded p-1 text-[#7f91b8] hover:text-red-400"
+            aria-label="Link entfernen"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       ))}
-      <button onClick={addLink} className="inline-flex items-center gap-1.5 rounded-md border border-[#33415d] px-2.5 py-1.5 text-xs font-medium text-[#d4def5] hover:bg-[#223150]">
-        <Plus className="h-3 w-3" />
-        Link
-      </button>
+
+      {adding ? (
+        <div className="space-y-2 rounded-md border border-[#33415d] bg-[#111a2c] p-3">
+          <input
+            autoFocus
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Link-Name"
+            className="w-full rounded-md border border-[#33415d] bg-[#0f1728] px-2 py-1.5 text-xs text-[#e7edf9] outline-none focus:ring-1 focus:ring-[#00B050]/50"
+          />
+          <div>
+            <input
+              value={url}
+              onChange={(e) => { setUrl(e.target.value); setUrlError(""); }}
+              placeholder="https://..."
+              className={`w-full rounded-md border px-2 py-1.5 text-xs text-[#e7edf9] outline-none focus:ring-1 focus:ring-[#00B050]/50 bg-[#0f1728] ${urlError ? "border-red-500" : "border-[#33415d]"}`}
+              onKeyDown={(e) => e.key === "Enter" && confirmAdd()}
+            />
+            {urlError ? <p className="mt-1 text-[10px] text-red-400">{urlError}</p> : null}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={confirmAdd}
+              disabled={!label.trim() || !url.trim()}
+              className="rounded-md bg-[#00B050] px-3 py-1 text-xs font-medium text-white hover:bg-[#00963f] disabled:opacity-50"
+            >
+              Hinzufügen
+            </button>
+            <button
+              onClick={() => { setAdding(false); setLabel(""); setUrl(""); setUrlError(""); }}
+              className="rounded-md border border-[#33415d] px-3 py-1 text-xs text-[#b7c4dd] hover:bg-[#223150]"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="inline-flex items-center gap-1.5 rounded-md border border-[#33415d] px-2.5 py-1.5 text-xs font-medium text-[#d4def5] hover:bg-[#223150]">
+          <Plus className="h-3 w-3" />
+          Link
+        </button>
+      )}
     </div>
   );
 }

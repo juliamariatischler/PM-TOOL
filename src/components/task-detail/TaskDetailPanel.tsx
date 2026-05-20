@@ -54,6 +54,8 @@ export function TaskDetailPanel() {
     selectSpace,
   } = useAppStore();
   const [task, setTask] = useState<TaskDetailTask | null>(null);
+  const [loadingTask, setLoadingTask] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [description, setDescription] = useState("");
@@ -90,11 +92,13 @@ export function TaskDetailPanel() {
   useEffect(() => {
     if (!selectedTaskId || !taskDetailOpen) return;
 
+    setTask(null);
+    setTaskError(null);
+    setLoadingTask(true);
+
     fetch(`/api/tasks/${selectedTaskId}`)
       .then((response) => {
-        if (!response.ok) {
-          throw new Error("Task konnte nicht geladen werden.");
-        }
+        if (!response.ok) throw new Error("Task konnte nicht geladen werden.");
         return response.json();
       })
       .then((nextTask) => {
@@ -106,12 +110,10 @@ export function TaskDetailPanel() {
         setMenuOpen(false);
       })
       .catch((error) => {
-        setTask(null);
-        showToast({
-          title: "Task konnte nicht geladen werden",
-          message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
-          variant: "error",
-        });
+        setTaskError(error instanceof Error ? error.message : "Unbekannter Fehler");
+      })
+      .finally(() => {
+        setLoadingTask(false);
       });
   }, [selectedTaskId, taskDetailOpen]);
 
@@ -729,11 +731,26 @@ export function TaskDetailPanel() {
           className="absolute left-0 top-0 z-50 h-full w-5 -translate-x-1/2 cursor-col-resize"
         />
         <div className="pointer-events-none absolute left-0 top-1/2 z-40 hidden h-24 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#44506c]/90 sm:block" />
-        {!task ? (
+        {taskError ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+            <p className="text-sm font-medium text-red-400">{taskError}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setTaskError(null); setLoadingTask(true); fetch(`/api/tasks/${selectedTaskId}`).then(r => r.ok ? r.json() : Promise.reject()).then(t => { setTask(t); setTitleDraft(t.title); setDescription(t.description ?? ""); }).catch(() => setTaskError("Task konnte nicht geladen werden.")).finally(() => setLoadingTask(false)); }}
+                className="rounded-lg bg-[#00B050] px-4 py-2 text-sm font-medium text-white hover:bg-[#00963f]"
+              >
+                Erneut versuchen
+              </button>
+              <button onClick={closeTask} className="rounded-lg border border-[#33415d] px-4 py-2 text-sm text-[#b7c4dd] hover:bg-[#223150]">
+                Schließen
+              </button>
+            </div>
+          </div>
+        ) : loadingTask ? (
           <div className="flex flex-1 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-[#00B050]" />
           </div>
-        ) : (
+        ) : !task ? null : (
           <>
             <div className="overflow-y-auto border-b border-[#263451]" style={{ height: topSectionHeight }}>
               <div className="px-7 pb-2 pt-6">

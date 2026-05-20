@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
+import { showToast } from "@/lib/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Space, Folder as FolderType } from "@/types";
 
@@ -254,15 +255,14 @@ export function Sidebar({
                 const confirmed = window.confirm(`Space "${space.name}" wirklich loeschen? Alle Folder, Projekte und Tasks darin werden mitgeloescht.`);
                 if (!confirmed) return;
 
-                const response = await fetch(`/api/spaces/${space.id}`, {
-                  method: "DELETE",
-                });
+                const response = await fetch(`/api/spaces/${space.id}`, { method: "DELETE" });
 
-                if (!response.ok) return;
-
-                if (selectedProjectId) {
-                  selectProject(null);
+                if (!response.ok) {
+                  showToast({ title: "Space konnte nicht gelöscht werden", variant: "error" });
+                  return;
                 }
+
+                if (selectedProjectId) selectProject(null);
                 selectSpace(null);
                 await onReload();
               }}
@@ -277,22 +277,23 @@ export function Sidebar({
                 if (!confirmed) return;
 
                 const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
-                if (!response.ok) return;
-
-                if (selectedProjectId === project.id) {
-                  selectProject(null);
+                if (!response.ok) {
+                  showToast({ title: "Projekt konnte nicht gelöscht werden", variant: "error" });
+                  return;
                 }
+
+                if (selectedProjectId === project.id) selectProject(null);
                 await onReload();
               }}
               onDeleteFolder={async (folder) => {
                 const confirmed = window.confirm(`Folder "${folder.name}" wirklich loeschen? Alle Projekte und Tasks darin werden mitgeloescht.`);
                 if (!confirmed) return;
 
-                const response = await fetch(`/api/folders/${folder.id}`, {
-                  method: "DELETE",
-                });
-
-                if (!response.ok) return;
+                const response = await fetch(`/api/folders/${folder.id}`, { method: "DELETE" });
+                if (!response.ok) {
+                  showToast({ title: "Folder konnte nicht gelöscht werden", variant: "error" });
+                  return;
+                }
 
                 await onReload();
               }}
@@ -652,7 +653,10 @@ function CreateFolderDialog({
         body: JSON.stringify({ name: name.trim(), spaceId }),
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        showToast({ title: "Folder konnte nicht erstellt werden", variant: "error" });
+        return;
+      }
 
       setName("");
       await onCreated();
@@ -719,7 +723,10 @@ function CreateProjectDialog({
         body: JSON.stringify({ name: name.trim(), folderId, color }),
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        showToast({ title: "Projekt konnte nicht erstellt werden", variant: "error" });
+        return;
+      }
 
       const project = await response.json();
       setName("");
