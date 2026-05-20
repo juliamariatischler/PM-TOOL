@@ -17,13 +17,19 @@ export async function clearSession() {
 }
 
 export async function getSessionUser() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return null;
+  }
 
-  if (error || !user) {
+  let user: { id: string; email?: string; created_at: string; user_metadata?: Record<string, unknown> } | null = null;
+  try {
+    const result = await supabase.auth.getUser();
+    if (result.error || !result.data.user) return null;
+    user = result.data.user;
+  } catch {
     return null;
   }
 
