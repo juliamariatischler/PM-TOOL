@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
+import { showToast } from "@/lib/toast";
 import type { ViewMode } from "@/types";
 
 const VIEWS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
@@ -19,9 +20,33 @@ const VIEWS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
 
 const STATUSES = ["New", "In Progress", "Under Review", "Approved", "Completed", "Cancelled"];
 
-export function Toolbar() {
+export function Toolbar({ onReload }: { onReload: () => Promise<void> | void }) {
   const { activeView, setActiveView, filters, setFilter, users } = useAppStore();
   const [filterOpen, setFilterOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await onReload();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function handleShare() {
+    if (typeof window === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      showToast({ title: "Link kopiert", variant: "success" });
+    } catch {
+      showToast({
+        title: "Link konnte nicht kopiert werden",
+        message: window.location.href,
+        variant: "error",
+      });
+    }
+  }
 
   return (
     <div className="border-b border-[#283754] bg-[#121b2f]">
@@ -42,7 +67,12 @@ export function Toolbar() {
             {view.label}
           </button>
         ))}
-        <button className="flex items-center gap-1 px-3 py-3 text-sm text-[#7f91b8] hover:text-white">
+        <button
+          type="button"
+          disabled
+          title="Neue Views werden ueber das Dashboard gespeichert."
+          className="flex cursor-not-allowed items-center gap-1 px-3 py-3 text-sm text-[#53637e]"
+        >
           <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -147,14 +177,24 @@ export function Toolbar() {
         </div>
 
         {/* Group by */}
-        <button className="flex items-center gap-1.5 rounded-md border border-[#33415d] px-3 py-2 text-sm text-[#c8d3eb] hover:bg-[#223150]">
+        <button
+          type="button"
+          disabled
+          title="Gruppierung ist noch nicht aktiv."
+          className="flex cursor-not-allowed items-center gap-1.5 rounded-md border border-[#2a3650] px-3 py-2 text-sm text-[#607193]"
+        >
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Group by
           <ChevronDown className="h-3 w-3 text-gray-400" />
         </button>
 
         {/* Fields */}
-        <button className="flex items-center gap-1.5 rounded-md border border-[#33415d] px-3 py-2 text-sm text-[#c8d3eb] hover:bg-[#223150]">
+        <button
+          type="button"
+          disabled
+          title="Felder-Auswahl ist noch nicht aktiv."
+          className="flex cursor-not-allowed items-center gap-1.5 rounded-md border border-[#2a3650] px-3 py-2 text-sm text-[#607193]"
+        >
           Fields
           <ChevronDown className="h-3 w-3 text-gray-400" />
         </button>
@@ -163,13 +203,28 @@ export function Toolbar() {
         <div className="flex-1" />
 
         {/* Right tools */}
-        <button className="rounded p-2 text-[#7f91b8] hover:bg-[#223150] hover:text-white">
-          <RotateCcw className="h-4 w-4" />
+        <button
+          type="button"
+          onClick={() => void handleRefresh()}
+          disabled={refreshing}
+          title="Workspace neu laden"
+          className="rounded p-2 text-[#7f91b8] hover:bg-[#223150] hover:text-white disabled:cursor-wait disabled:opacity-60"
+        >
+          <RotateCcw className={cn("h-4 w-4", refreshing && "animate-spin")} />
         </button>
-        <button className="rounded p-2 text-[#7f91b8] hover:bg-[#223150] hover:text-white">
+        <button
+          type="button"
+          disabled
+          title="Automatischer Refresh ist noch nicht aktiv."
+          className="cursor-not-allowed rounded p-2 text-[#53637e]"
+        >
           <RotateCw className="h-4 w-4" />
         </button>
-        <button className="flex items-center gap-1.5 rounded-md border border-[#33415d] px-3 py-2 text-sm text-[#c8d3eb] hover:bg-[#223150]">
+        <button
+          type="button"
+          onClick={() => void handleShare()}
+          className="flex items-center gap-1.5 rounded-md border border-[#33415d] px-3 py-2 text-sm text-[#c8d3eb] hover:bg-[#223150]"
+        >
           <Link className="h-3.5 w-3.5" />
           Share
         </button>

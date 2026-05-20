@@ -5,6 +5,7 @@ import { cn, STATUS_CONFIG, STATUSES, formatDate, isOverdue, getInitials, matche
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { showToast } from "@/lib/toast";
 import type { Task, Project, Space, User } from "@/types";
 
 const COLUMNS = [
@@ -108,20 +109,36 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
     .filter((section) => !isLifecycleView || section.tasks.length > 0);
 
   async function persistTaskStatus(taskId: string, status: string) {
+    const previousTask = findTaskById(spaces, taskId);
     updateTaskOptimistic(taskId, { status });
-    const response = await fetch(`/api/tasks/${taskId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
 
-    if (response.ok) {
-      const updated = await response.json();
-      updateTaskOptimistic(taskId, updated);
+      if (response.ok) {
+        const updated = await response.json();
+        updateTaskOptimistic(taskId, updated);
+        showToast({ title: "Status aktualisiert", variant: "success" });
+        return;
+      }
+
+      if (previousTask) updateTaskOptimistic(taskId, { status: previousTask.status });
+      showToast({ title: "Status konnte nicht gespeichert werden", variant: "error" });
+    } catch (error) {
+      if (previousTask) updateTaskOptimistic(taskId, { status: previousTask.status });
+      showToast({
+        title: "Status konnte nicht gespeichert werden",
+        message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+        variant: "error",
+      });
     }
   }
 
   async function persistTaskAssignee(taskId: string, assigneeIds: string[]) {
+    const previousTask = findTaskById(spaces, taskId);
     const assignees = users.filter((user) => assigneeIds.includes(user.id));
     updateTaskOptimistic(taskId, {
       assigneeId: assignees[0]?.id ?? null,
@@ -130,15 +147,29 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
       assignees,
     });
 
-    const response = await fetch(`/api/tasks/${taskId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assigneeIds }),
-    });
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeIds }),
+      });
 
-    if (response.ok) {
-      const updated = await response.json();
-      updateTaskOptimistic(taskId, updated);
+      if (response.ok) {
+        const updated = await response.json();
+        updateTaskOptimistic(taskId, updated);
+        showToast({ title: "Zuweisung aktualisiert", variant: "success" });
+        return;
+      }
+
+      if (previousTask) updateTaskOptimistic(taskId, previousTask);
+      showToast({ title: "Zuweisung konnte nicht gespeichert werden", variant: "error" });
+    } catch (error) {
+      if (previousTask) updateTaskOptimistic(taskId, previousTask);
+      showToast({
+        title: "Zuweisung konnte nicht gespeichert werden",
+        message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+        variant: "error",
+      });
     }
   }
 
@@ -193,34 +224,49 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
 
     addTaskOptimistic(projectId, tempTask);
 
-    const response = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        assigneeIds,
-        projectId,
-        startDate,
-        dueDate,
-        priority,
-        effort,
-        plannedCost,
-        description: description || null,
-      }),
-    });
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          assigneeIds,
+          projectId,
+          startDate,
+          dueDate,
+          priority,
+          effort,
+          plannedCost,
+          description: description || null,
+        }),
+      });
 
-    if (response.ok) {
-      const created = await response.json();
-      updateTaskOptimistic(tempTask.id, created);
-      return;
+      if (response.ok) {
+        const created = await response.json();
+        updateTaskOptimistic(tempTask.id, created);
+        showToast({ title: "Task erstellt", variant: "success" });
+        return;
+      }
+
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      deleteTaskOptimistic(tempTask.id);
+      showToast({ title: "Task konnte nicht erstellt werden", message: payload?.error, variant: "error" });
+    } catch (error) {
+      deleteTaskOptimistic(tempTask.id);
+      showToast({
+        title: "Task konnte nicht erstellt werden",
+        message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+        variant: "error",
+      });
     }
-
-    deleteTaskOptimistic(tempTask.id);
   }
 
   async function reloadWorkspace() {
     const response = await fetch("/api/spaces");
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast({ title: "Workspace konnte nicht aktualisiert werden", variant: "error" });
+      return;
+    }
     const nextSpaces = await response.json();
     setSpaces(nextSpaces);
   }
@@ -232,10 +278,14 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
       body: JSON.stringify({ projectId, parentId: null, position: 999 }),
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast({ title: "Task konnte nicht verschoben werden", variant: "error" });
+      return;
+    }
 
     await reloadWorkspace();
     setMovingTask(null);
+    showToast({ title: "Task verschoben", variant: "success" });
   }
 
   async function handleLifecycleTask(taskId: string, patch: Pick<Task, "archivedAt" | "deletedAt">) {
@@ -245,8 +295,12 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
       body: JSON.stringify(patch),
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast({ title: "Task konnte nicht aktualisiert werden", variant: "error" });
+      return;
+    }
     await reloadWorkspace();
+    showToast({ title: "Task aktualisiert", variant: "success" });
   }
 
   async function handleEmptyTrash() {
@@ -254,8 +308,12 @@ export function TableView({ currentUserId }: { currentUserId: string }) {
     if (!confirmed) return;
 
     const response = await fetch("/api/tasks/trash", { method: "DELETE" });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast({ title: "Papierkorb konnte nicht geleert werden", variant: "error" });
+      return;
+    }
     await reloadWorkspace();
+    showToast({ title: "Papierkorb geleert", variant: "success" });
   }
 
   return (
@@ -615,6 +673,29 @@ function ProjectHeader({
   );
 }
 
+function findTaskById(spaces: Space[], taskId: string): Task | null {
+  for (const space of spaces) {
+    for (const folder of space.folders) {
+      for (const project of folder.projects) {
+        const task = findTaskInList(project.tasks, taskId);
+        if (task) return task;
+      }
+    }
+  }
+
+  return null;
+}
+
+function findTaskInList(tasks: Task[], taskId: string): Task | null {
+  for (const task of tasks) {
+    if (task.id === taskId) return task;
+    const subtask = findTaskInList(task.subtasks, taskId);
+    if (subtask) return subtask;
+  }
+
+  return null;
+}
+
 function TaskRow({
   task,
   depth,
@@ -659,18 +740,30 @@ function TaskRow({
     }
 
     useAppStore.getState().updateTaskOptimistic(task.id, { title: nextTitle });
-    const response = await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: nextTitle }),
-    });
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextTitle }),
+      });
 
-    if (response.ok) {
-      const updated = await response.json();
-      useAppStore.getState().updateTaskOptimistic(task.id, updated);
-    } else {
+      if (response.ok) {
+        const updated = await response.json();
+        useAppStore.getState().updateTaskOptimistic(task.id, updated);
+        showToast({ title: "Titel gespeichert", variant: "success" });
+      } else {
+        useAppStore.getState().updateTaskOptimistic(task.id, { title: task.title });
+        setTitleDraft(task.title);
+        showToast({ title: "Titel konnte nicht gespeichert werden", variant: "error" });
+      }
+    } catch (error) {
       useAppStore.getState().updateTaskOptimistic(task.id, { title: task.title });
       setTitleDraft(task.title);
+      showToast({
+        title: "Titel konnte nicht gespeichert werden",
+        message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+        variant: "error",
+      });
     }
 
     setEditingTitle(false);

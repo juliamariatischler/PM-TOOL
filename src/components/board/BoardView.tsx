@@ -17,13 +17,29 @@ import { Plus, MoreHorizontal } from "lucide-react";
 import { cn, STATUS_CONFIG, STATUSES, formatDate, getInitials, matchesTaskLifecycle } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { showToast } from "@/lib/toast";
 import type { Task } from "@/types";
 
-export function BoardView() {
+export function BoardView({ onReload }: { onReload: () => Promise<void> | void }) {
   const { spaces, selectedSpaceId, selectedProjectId, filters, openTask, updateTaskOptimistic } = useAppStore();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [creatingStatus, setCreatingStatus] = useState<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const targetProjectId = useMemo(() => {
+    if (selectedProjectId) return selectedProjectId;
+
+    for (const space of spaces) {
+      if (selectedSpaceId && space.id !== selectedSpaceId) continue;
+      for (const folder of space.folders) {
+        const project = folder.projects[0];
+        if (project) return project.id;
+      }
+    }
+
+    return null;
+  }, [selectedProjectId, selectedSpaceId, spaces]);
 
   const allTasks = useMemo(() => {
     let tasks: Task[] = [];
@@ -91,6 +107,51 @@ export function BoardView() {
 
     if (!response.ok) {
       updateTaskOptimistic(taskId, { status: task.status });
+      showToast({ title: "Status konnte nicht gespeichert werden", variant: "error" });
+      return;
+    }
+
+    showToast({ title: "Status aktualisiert", variant: "success" });
+  }
+
+  async function handleCreateTask(status: string, title: string) {
+    if (!targetProjectId) {
+      showToast({
+        title: "Kein Projekt ausgewaehlt",
+        message: "Lege zuerst ein Projekt an oder waehle eines in der Sidebar.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setCreatingStatus(status);
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, status, projectId: targetProjectId }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        showToast({
+          title: "Task konnte nicht erstellt werden",
+          message: payload?.error,
+          variant: "error",
+        });
+        return;
+      }
+
+      await onReload();
+      showToast({ title: "Task erstellt", variant: "success" });
+    } catch (error) {
+      showToast({
+        title: "Task konnte nicht erstellt werden",
+        message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+        variant: "error",
+      });
+    } finally {
+      setCreatingStatus(null);
     }
   }
 
@@ -108,6 +169,9 @@ export function BoardView() {
             status={status}
             tasks={tasksByStatus[status] ?? []}
             onOpenTask={openTask}
+            onCreateTask={(title) => void handleCreateTask(status, title)}
+            creating={creatingStatus === status}
+            canCreate={Boolean(targetProjectId)}
           />
         ))}
       </div>
@@ -120,13 +184,29 @@ function KanbanColumn({
   status,
   tasks,
   onOpenTask,
+  onCreateTask,
+  creating,
+  canCreate,
 }: {
   status: string;
   tasks: Task[];
   onOpenTask: (id: string) => void;
+  onCreateTask: (title: string) => void;
+  creating: boolean;
+  canCreate: boolean;
 }) {
   const cfg = STATUS_CONFIG[status];
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+
+  function submitDraft() {
+    const title = draftTitle.trim();
+    if (!title || creating) return;
+    onCreateTask(title);
+    setDraftTitle("");
+    setDraftOpen(false);
+  }
 
   return (
     <div className="flex w-72 flex-shrink-0 flex-col rounded-xl border border-[#2b3a58] bg-[#17233a]">
@@ -136,7 +216,12 @@ function KanbanColumn({
           <span className="text-sm font-semibold text-white">{cfg.label}</span>
           <span className="rounded-md bg-[#0f1728] px-2 py-0.5 text-xs font-semibold text-[#94a3c3]">{tasks.length}</span>
         </div>
-        <button className="text-[#7f91b8] hover:text-white">
+        <button
+          type="button"
+          disabled
+          title="Spaltenaktionen sind noch nicht aktiv."
+          className="cursor-not-allowed text-[#53637e]"
+        >
           <MoreHorizontal className="h-4 w-4" />
         </button>
       </div>
@@ -154,10 +239,58 @@ function KanbanColumn({
       </div>
 
       <div className="border-t border-[#2b3a58] p-2">
-        <button className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium text-[#94a3c3] hover:bg-[#223150] hover:text-[#8ff0ba]">
-          <Plus className="h-3.5 w-3.5" />
-          Add task
-        </button>
+        {draftOpen ? (
+          <div className="space-y-2">
+            <input
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  submitDraft();
+                }
+                if (event.key === "Escape") {
+                  setDraftOpen(false);
+                  setDraftTitle("");
+                }
+              }}
+              autoFocus
+              placeholder="Task name..."
+              className="h-9 w-full rounded-md border border-[#33415d] bg-[#0f1728] px-2 text-sm text-[#e7edf9] placeholder:text-[#6f7f9f] focus:outline-none focus:ring-2 focus:ring-[#00B050]/60"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={submitDraft}
+                disabled={!draftTitle.trim() || creating}
+                className="rounded-md bg-[#00B050] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#00963f] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {creating ? "Speichert..." : "Erstellen"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftOpen(false);
+                  setDraftTitle("");
+                }}
+                className="rounded-md px-2 py-1.5 text-xs text-[#94a3c3] hover:bg-[#223150] hover:text-white"
+              >
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setDraftOpen(true)}
+            disabled={!canCreate}
+            title={canCreate ? "Task in dieser Spalte erstellen" : "Erstelle oder waehle zuerst ein Projekt."}
+            className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium text-[#94a3c3] hover:bg-[#223150] hover:text-[#8ff0ba] disabled:cursor-not-allowed disabled:text-[#53637e] disabled:hover:bg-transparent"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add task
+          </button>
+        )}
       </div>
     </div>
   );

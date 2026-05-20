@@ -153,7 +153,7 @@ export function Sidebar({
         <button className="text-gray-400 hover:text-white">
           <Calendar className="h-4 w-4" />
         </button>
-        <button className="text-gray-400 hover:text-white">
+        <button onClick={() => setActiveView("dashboard")} className="text-gray-400 hover:text-white">
           <BarChart2 className="h-4 w-4" />
         </button>
       </aside>
@@ -209,7 +209,14 @@ export function Sidebar({
           />
           <NavItem icon={<Star className="h-4 w-4" />} label="Starred" />
           <NavItem icon={<BarChart2 className="h-4 w-4" />} label="Reports" />
-          <NavItem icon={<Layout className="h-4 w-4" />} label="Dashboards" />
+          <NavItem
+            icon={<Layout className="h-4 w-4" />}
+            label="Dashboards"
+            onClick={() => {
+              setActiveView("dashboard");
+              selectProject(null);
+            }}
+          />
         </nav>
 
         <div className="mx-3 my-3 border-t border-[#283754]" />

@@ -1,8 +1,15 @@
 import type {
   Folder,
+  DashboardBlock,
+  DashboardBlockType,
+  DashboardBlockWidth,
+  DashboardPage,
   InboxItem,
   MicrosoftConnectionStatus,
   Project,
+  SavedTaskView,
+  SavedTaskViewFilters,
+  SavedTaskViewType,
   Space,
   TaskApproval,
   Task,
@@ -139,6 +146,46 @@ type DbTaskAssigneeRow = {
   created_at: string;
 };
 
+type DbPageRow = {
+  id: string;
+  space_id: string | null;
+  title: string;
+  icon: string | null;
+  position: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DbPageBlockRow = {
+  id: string;
+  page_id: string;
+  block_type: DashboardBlockType;
+  title: string;
+  config: Record<string, unknown>;
+  content: Record<string, unknown>;
+  width: DashboardBlockWidth;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type DbSavedTaskViewRow = {
+  id: string;
+  space_id: string | null;
+  project_id: string | null;
+  name: string;
+  view_type: SavedTaskViewType;
+  filters: SavedTaskViewFilters;
+  columns: string[];
+  sort: Array<{ field: string; direction: "asc" | "desc" }>;
+  group_by: string | null;
+  position: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 const TASK_SELECT = [
   "id",
   "title",
@@ -237,6 +284,39 @@ function mapTask(row: DbTaskRow, usersById: Map<string, User>, assigneesByTaskId
     plannedCost: row.planned_cost,
     archivedAt: row.archived_at,
     deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapDashboardBlock(row: DbPageBlockRow): DashboardBlock {
+  return {
+    id: row.id,
+    pageId: row.page_id,
+    blockType: row.block_type,
+    title: row.title,
+    config: row.config ?? {},
+    content: row.content ?? {},
+    width: row.width,
+    position: row.position,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapSavedTaskView(row: DbSavedTaskViewRow): SavedTaskView {
+  return {
+    id: row.id,
+    spaceId: row.space_id,
+    projectId: row.project_id,
+    name: row.name,
+    viewType: row.view_type,
+    filters: row.filters ?? {},
+    columns: Array.isArray(row.columns) ? row.columns : [],
+    sort: Array.isArray(row.sort) ? row.sort : [],
+    groupBy: row.group_by,
+    position: row.position,
+    createdById: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1201,6 +1281,218 @@ export async function getTaskDetail(id: string) {
     approvals,
     links,
   };
+}
+
+export async function listDashboardPages(spaceId?: string | null) {
+  const admin = getSupabaseAdminClient();
+
+  let pageQuery = admin
+    .from("pages")
+    .select("id, space_id, title, icon, position, created_by, created_at, updated_at")
+    .order("position", { ascending: true });
+
+  if (spaceId !== undefined) {
+    pageQuery = spaceId ? pageQuery.eq("space_id", spaceId) : pageQuery.is("space_id", null);
+  }
+
+  const [pageRows, blockRows] = await Promise.all([
+    runQuery<DbPageRow[]>(pageQuery),
+    runQuery<DbPageBlockRow[]>(
+      admin
+        .from("page_blocks")
+        .select("id, page_id, block_type, title, config, content, width, position, created_at, updated_at")
+        .order("position", { ascending: true })
+    ),
+  ]);
+
+  const blocksByPage = new Map<string, DashboardBlock[]>();
+  for (const row of blockRows ?? []) {
+    const list = blocksByPage.get(row.page_id) ?? [];
+    list.push(mapDashboardBlock(row));
+    blocksByPage.set(row.page_id, list);
+  }
+
+  return (pageRows ?? []).map((row) => ({
+    id: row.id,
+    spaceId: row.space_id,
+    title: row.title,
+    icon: row.icon,
+    position: row.position,
+    createdById: row.created_by,
+    blocks: blocksByPage.get(row.id) ?? [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  } satisfies DashboardPage));
+}
+
+export async function createDashboardPage(input: {
+  title: string;
+  icon?: string | null;
+  spaceId?: string | null;
+  position?: number | null;
+  createdById?: string | null;
+}) {
+  const admin = getSupabaseAdminClient();
+  const row = ensurePresent(await runQuery<DbPageRow>(
+    admin
+      .from("pages")
+      .insert({
+        title: input.title,
+        icon: input.icon ?? null,
+        space_id: input.spaceId ?? null,
+        position: input.position ?? 0,
+        created_by: input.createdById ?? null,
+      })
+      .select("id, space_id, title, icon, position, created_by, created_at, updated_at")
+      .single()
+  ), "Unable to create page");
+
+  return {
+    id: row.id,
+    spaceId: row.space_id,
+    title: row.title,
+    icon: row.icon,
+    position: row.position,
+    createdById: row.created_by,
+    blocks: [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  } satisfies DashboardPage;
+}
+
+export async function updateDashboardPage(id: string, patch: Record<string, unknown>) {
+  const admin = getSupabaseAdminClient();
+  const row = ensurePresent(await runQuery<DbPageRow>(
+    admin
+      .from("pages")
+      .update({
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
+        ...(patch.spaceId !== undefined ? { space_id: patch.spaceId } : {}),
+        ...(patch.position !== undefined ? { position: patch.position } : {}),
+      })
+      .eq("id", id)
+      .select("id, space_id, title, icon, position, created_by, created_at, updated_at")
+      .single()
+  ), "Unable to update page");
+
+  return {
+    id: row.id,
+    spaceId: row.space_id,
+    title: row.title,
+    icon: row.icon,
+    position: row.position,
+    createdById: row.created_by,
+    blocks: [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  } satisfies DashboardPage;
+}
+
+export async function deleteDashboardPage(id: string) {
+  const admin = getSupabaseAdminClient();
+  await runQuery(admin.from("pages").delete().eq("id", id).select("id").single());
+}
+
+export async function createPageBlock(input: {
+  pageId: string;
+  blockType: DashboardBlockType;
+  title: string;
+  config?: Record<string, unknown> | null;
+  content?: Record<string, unknown> | null;
+  width?: DashboardBlockWidth | null;
+  position?: number | null;
+}) {
+  const admin = getSupabaseAdminClient();
+  const row = ensurePresent(await runQuery<DbPageBlockRow>(
+    admin
+      .from("page_blocks")
+      .insert({
+        page_id: input.pageId,
+        block_type: input.blockType,
+        title: input.title,
+        config: input.config ?? {},
+        content: input.content ?? {},
+        width: input.width ?? "half",
+        position: input.position ?? 0,
+      })
+      .select("id, page_id, block_type, title, config, content, width, position, created_at, updated_at")
+      .single()
+  ), "Unable to create block");
+
+  return mapDashboardBlock(row);
+}
+
+export async function updatePageBlock(id: string, patch: Record<string, unknown>) {
+  const admin = getSupabaseAdminClient();
+  const row = ensurePresent(await runQuery<DbPageBlockRow>(
+    admin
+      .from("page_blocks")
+      .update({
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.config !== undefined ? { config: patch.config } : {}),
+        ...(patch.content !== undefined ? { content: patch.content } : {}),
+        ...(patch.width !== undefined ? { width: patch.width } : {}),
+        ...(patch.position !== undefined ? { position: patch.position } : {}),
+      })
+      .eq("id", id)
+      .select("id, page_id, block_type, title, config, content, width, position, created_at, updated_at")
+      .single()
+  ), "Unable to update block");
+
+  return mapDashboardBlock(row);
+}
+
+export async function deletePageBlock(id: string) {
+  const admin = getSupabaseAdminClient();
+  await runQuery(admin.from("page_blocks").delete().eq("id", id).select("id").single());
+}
+
+export async function listSavedTaskViews() {
+  const admin = getSupabaseAdminClient();
+  const rows = await runQuery<DbSavedTaskViewRow[]>(
+    admin
+      .from("saved_task_views")
+      .select("id, space_id, project_id, name, view_type, filters, columns, sort, group_by, position, created_by, created_at, updated_at")
+      .order("position", { ascending: true })
+  );
+
+  return (rows ?? []).map((row) => mapSavedTaskView(row));
+}
+
+export async function createSavedTaskView(input: {
+  name: string;
+  viewType?: SavedTaskViewType | null;
+  spaceId?: string | null;
+  projectId?: string | null;
+  filters?: SavedTaskViewFilters | null;
+  columns?: string[] | null;
+  sort?: Array<{ field: string; direction: "asc" | "desc" }> | null;
+  groupBy?: string | null;
+  position?: number | null;
+  createdById?: string | null;
+}) {
+  const admin = getSupabaseAdminClient();
+  const row = ensurePresent(await runQuery<DbSavedTaskViewRow>(
+    admin
+      .from("saved_task_views")
+      .insert({
+        name: input.name,
+        view_type: input.viewType ?? "table",
+        space_id: input.spaceId ?? null,
+        project_id: input.projectId ?? null,
+        filters: input.filters ?? {},
+        columns: input.columns ?? ["title", "status", "assignee", "dueDate"],
+        sort: input.sort ?? [],
+        group_by: input.groupBy ?? null,
+        position: input.position ?? 0,
+        created_by: input.createdById ?? null,
+      })
+      .select("id, space_id, project_id, name, view_type, filters, columns, sort, group_by, position, created_by, created_at, updated_at")
+      .single()
+  ), "Unable to create saved view");
+
+  return mapSavedTaskView(row);
 }
 
 export async function setTaskCreatorIfMissing(id: string, creatorId: string) {

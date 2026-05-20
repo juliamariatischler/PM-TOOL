@@ -140,3 +140,57 @@ export interface TaskFilters {
   search: string;
   lifecycle: "active" | "archived" | "deleted" | "all";
 }
+
+export type DashboardBlockType = "text" | "shortcuts" | "links" | "task_view" | "stats";
+export type DashboardBlockWidth = "full" | "half";
+export type SavedTaskViewType = "table" | "board" | "list";
+
+export interface SavedTaskViewFilters {
+  status?: string[];
+  assigneeId?: string[];
+  createdById?: string[];
+  search?: string;
+  lifecycle?: "active" | "archived" | "deleted" | "all";
+  due?: "overdue" | "today" | "week" | "none";
+}
+
+export interface SavedTaskView {
+  id: string;
+  spaceId: string | null;
+  projectId: string | null;
+  name: string;
+  viewType: SavedTaskViewType;
+  filters: SavedTaskViewFilters;
+  columns: string[];
+  sort: Array<{ field: string; direction: "asc" | "desc" }>;
+  groupBy: string | null;
+  position: number;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DashboardBlock {
+  id: string;
+  pageId: string;
+  blockType: DashboardBlockType;
+  title: string;
+  config: Record<string, unknown>;
+  content: Record<string, unknown>;
+  width: DashboardBlockWidth;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DashboardPage {
+  id: string;
+  spaceId: string | null;
+  title: string;
+  icon: string | null;
+  position: number;
+  createdById: string | null;
+  blocks: DashboardBlock[];
+  createdAt: string;
+  updatedAt: string;
+}

@@ -9,9 +9,12 @@ import { WorkloadView } from "@/components/workload/WorkloadView";
 import { InboxView } from "@/components/inbox/InboxView";
 import { TaskDetailPanel } from "@/components/task-detail/TaskDetailPanel";
 import { GanttView } from "@/components/gantt/GanttView";
+import { DashboardView } from "@/components/dashboard/DashboardView";
 import { CommandPalette } from "@/components/ui/command-palette";
+import { Toaster } from "@/components/ui/toaster";
 import { Loader2, FolderOpen, LogOut, Plus } from "lucide-react";
 import { CreateSpaceDialog } from "@/components/sidebar/CreateSpaceDialog";
+import { showToast } from "@/lib/toast";
 
 async function fetchJson<T>(input: string, fallback: T): Promise<T> {
   try {
@@ -19,15 +22,31 @@ async function fetchJson<T>(input: string, fallback: T): Promise<T> {
     const contentType = response.headers.get("content-type") || "";
 
     if (!response.ok) {
+      let message = `Request failed: ${response.status}`;
+      if (contentType.includes("application/json")) {
+        const payload = (await response.json()) as { error?: string };
+        message = payload.error ?? message;
+      }
+      showToast({ title: "Daten konnten nicht geladen werden", message, variant: "error" });
       return fallback;
     }
 
     if (!contentType.includes("application/json")) {
+      showToast({
+        title: "Unerwartete Serverantwort",
+        message: `${input} hat kein JSON geliefert.`,
+        variant: "error",
+      });
       return fallback;
     }
 
     return (await response.json()) as T;
-  } catch {
+  } catch (error) {
+    showToast({
+      title: "Netzwerkfehler",
+      message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+      variant: "error",
+    });
     return fallback;
   }
 }
@@ -39,7 +58,7 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
   const [loggingOut, setLoggingOut] = useState(false);
   const initialTaskHandledRef = useRef(false);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (silent = false) => {
     const [spacesData, usersData, inboxData] = await Promise.all([
       fetchJson("/api/spaces", []),
       fetchJson("/api/users", []),
@@ -48,10 +67,13 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
     setSpaces(spacesData);
     setUsers(usersData);
     setInboxItems(inboxData);
+    if (!silent) {
+      showToast({ title: "Workspace aktualisiert", variant: "success" });
+    }
   }, [setInboxItems, setSpaces, setUsers]);
 
   useEffect(() => {
-    reload().finally(() => setLoading(false));
+    reload(true).finally(() => setLoading(false));
   }, [reload]);
 
   useEffect(() => {
@@ -79,8 +101,18 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
   async function handleLogout() {
     setLoggingOut(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) {
+        showToast({ title: "Logout fehlgeschlagen", message: "Bitte versuche es erneut.", variant: "error" });
+        return;
+      }
       window.location.href = "/login";
+    } catch (error) {
+      showToast({
+        title: "Logout fehlgeschlagen",
+        message: error instanceof Error ? error.message : "Bitte versuche es erneut.",
+        variant: "error",
+      });
     } finally {
       setLoggingOut(false);
     }
@@ -111,7 +143,7 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
           </div>
         </div>
 
-        {activeView !== "inbox" ? <Toolbar /> : null}
+        {activeView !== "inbox" ? <Toolbar onReload={() => reload(false)} /> : null}
 
         {/* Main content */}
         <div className="flex-1 overflow-hidden relative">
@@ -127,11 +159,11 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
           ) : (
             <>
               {activeView === "table" && <TableView currentUserId={currentUser.id} />}
-              {activeView === "board" && <BoardView />}
+              {activeView === "board" && <BoardView onReload={() => reload(true)} />}
               {activeView === "workload" && <WorkloadView />}
               {activeView === "gantt" && <GanttView />}
               {activeView === "inbox" && <InboxView />}
-              {activeView === "dashboard" && <ComingSoon view={activeView} />}
+              {activeView === "dashboard" && <DashboardView currentUserId={currentUser.id} />}
             </>
           )}
         </div>
@@ -139,6 +171,7 @@ export function AppShell({ currentUser }: { currentUser: { id: string; name: str
 
       <TaskDetailPanel />
       <CommandPalette />
+      <Toaster />
 
       <CreateSpaceDialog
         open={createSpaceOpen}
@@ -168,20 +201,6 @@ function EmptyWorkspace({ onCreateSpace }: { onCreateSpace: () => void }) {
         <Plus className="h-4 w-4" />
         Ersten Space erstellen
       </button>
-    </div>
-  );
-}
-
-function ComingSoon({ view }: { view: string }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4">
-      <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-[#2b3a58] bg-[#17233a]">
-        <span className="text-2xl">{view === "gantt" ? "📅" : "📊"}</span>
-      </div>
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white capitalize">{view} View</h3>
-        <p className="mt-1 text-sm text-[#94a3c3]">Coming soon.</p>
-      </div>
     </div>
   );
 }

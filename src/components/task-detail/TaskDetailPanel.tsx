@@ -27,6 +27,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { showToast } from "@/lib/toast";
 import type { MicrosoftConnectionStatus, Task, TaskApproval, TaskComment, TaskDocument, TaskLink, User } from "@/types";
 
 type TaskDetailTask = Task & {
@@ -90,7 +91,12 @@ export function TaskDetailPanel() {
     if (!selectedTaskId || !taskDetailOpen) return;
 
     fetch(`/api/tasks/${selectedTaskId}`)
-      .then((response) => response.json())
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Task konnte nicht geladen werden.");
+        }
+        return response.json();
+      })
       .then((nextTask) => {
         setTask(nextTask);
         setTitleDraft(nextTask.title);
@@ -98,6 +104,14 @@ export function TaskDetailPanel() {
         setDescriptionDirty(false);
         setDescriptionError(null);
         setMenuOpen(false);
+      })
+      .catch((error) => {
+        setTask(null);
+        showToast({
+          title: "Task konnte nicht geladen werden",
+          message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+          variant: "error",
+        });
       });
   }, [selectedTaskId, taskDetailOpen]);
 
@@ -189,6 +203,7 @@ export function TaskDetailPanel() {
   async function patchTask(patch: Partial<Task>) {
     if (!task) return;
 
+    const previousTask = task;
     const optimisticPatch = { ...patch } as Partial<TaskDetailTask>;
     if ("assigneeIds" in patch) {
       const assignees = users.filter((user) => patch.assigneeIds?.includes(user.id));
@@ -203,16 +218,32 @@ export function TaskDetailPanel() {
     updateTaskOptimistic(task.id, optimisticPatch);
     setTask((prev) => (prev ? { ...prev, ...optimisticPatch } : prev));
 
-    const response = await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
 
-    if (response.ok) {
-      const updated = await response.json();
-      updateTaskOptimistic(task.id, updated);
-      setTask((prev) => (prev ? { ...prev, ...updated } : prev));
+      if (response.ok) {
+        const updated = await response.json();
+        updateTaskOptimistic(task.id, updated);
+        setTask((prev) => (prev ? { ...prev, ...updated } : prev));
+        showToast({ title: "Task gespeichert", variant: "success" });
+        return;
+      }
+
+      updateTaskOptimistic(task.id, previousTask);
+      setTask(previousTask);
+      showToast({ title: "Task konnte nicht gespeichert werden", variant: "error" });
+    } catch (error) {
+      updateTaskOptimistic(task.id, previousTask);
+      setTask(previousTask);
+      showToast({
+        title: "Task konnte nicht gespeichert werden",
+        message: error instanceof Error ? error.message : "Die Anfrage konnte nicht abgeschlossen werden.",
+        variant: "error",
+      });
     }
   }
 
@@ -274,7 +305,10 @@ export function TaskDetailPanel() {
 
   async function reloadWorkspace() {
     const response = await fetch("/api/spaces");
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast({ title: "Workspace konnte nicht aktualisiert werden", variant: "error" });
+      return;
+    }
     const nextSpaces = await response.json();
     setSpaces(nextSpaces);
   }
@@ -293,7 +327,11 @@ export function TaskDetailPanel() {
       }),
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      showToast({ title: "Subtask konnte nicht erstellt werden", message: payload?.error, variant: "error" });
+      return;
+    }
 
     const created = await response.json();
     addSubtaskOptimistic(task.id, created);
@@ -307,6 +345,7 @@ export function TaskDetailPanel() {
     );
     setSubtaskTitle("");
     setSubtaskOpen(false);
+    showToast({ title: "Subtask erstellt", variant: "success" });
   }
 
   async function addComment() {
@@ -318,7 +357,10 @@ export function TaskDetailPanel() {
       body: JSON.stringify({ body: comment.trim() }),
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast({ title: "Kommentar konnte nicht gesendet werden", variant: "error" });
+      return;
+    }
 
     const created = (await response.json()) as TaskComment;
     setTask((prev) =>
@@ -330,6 +372,7 @@ export function TaskDetailPanel() {
         : prev
     );
     setComment("");
+    showToast({ title: "Kommentar gesendet", variant: "success" });
   }
 
   async function submitCommentFromKeyboard() {
