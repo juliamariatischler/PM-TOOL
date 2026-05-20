@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function LoginForm() {
   const router = useRouter();
@@ -10,6 +11,28 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  async function handleReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setResetLoading(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (resetError) {
+        setError(resetError.message);
+        return;
+      }
+      setResetSent(true);
+    } finally {
+      setResetLoading(false);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,59 +76,127 @@ export function LoginForm() {
         </section>
 
         <section className="flex items-center justify-center">
-          <form
-            onSubmit={handleSubmit}
-            className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-[0_25px_80px_rgba(15,23,42,0.12)] backdrop-blur"
-          >
-            <h2 className="text-2xl font-semibold text-slate-900">Anmelden</h2>
-            <p className="mt-2 text-sm text-slate-500">Nutze deine E-Mail-Adresse und dein Passwort.</p>
-
-            <div className="mt-8 space-y-5">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">E-Mail</span>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <Mail className="h-4 w-4 text-slate-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                    placeholder="name@firma.de"
-                    autoComplete="email"
-                  />
+          <div className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-[0_25px_80px_rgba(15,23,42,0.12)] backdrop-blur">
+            {forgotMode ? (
+              resetSent ? (
+                <div className="py-6 text-center">
+                  <p className="text-lg font-semibold text-slate-900">E-Mail gesendet!</p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Prüfe dein Postfach und klicke auf den Link zum Zurücksetzen.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(false); setResetSent(false); setError(""); }}
+                    className="mt-6 text-sm font-medium text-[#00B050] hover:underline"
+                  >
+                    Zurück zum Login
+                  </button>
                 </div>
-              </label>
+              ) : (
+                <form onSubmit={handleReset}>
+                  <h2 className="text-2xl font-semibold text-slate-900">Passwort zurücksetzen</h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Gib deine E-Mail ein – du erhältst einen Link zum Zurücksetzen.
+                  </p>
+                  <div className="mt-8">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-700">E-Mail</span>
+                      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <Mail className="h-4 w-4 text-slate-400" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                          placeholder="name@firma.de"
+                          autoComplete="email"
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+                  {error ? (
+                    <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                      {error}
+                    </p>
+                  ) : null}
+                  <button
+                    type="submit"
+                    disabled={resetLoading || !email.trim()}
+                    className="mt-6 w-full rounded-2xl bg-[#00B050] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#00963f] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {resetLoading ? "Wird gesendet..." : "Reset-Link senden"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(false); setError(""); }}
+                    className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700"
+                  >
+                    Zurück zum Login
+                  </button>
+                </form>
+              )
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <h2 className="text-2xl font-semibold text-slate-900">Anmelden</h2>
+                <p className="mt-2 text-sm text-slate-500">Nutze deine E-Mail-Adresse und dein Passwort.</p>
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Passwort</span>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <LockKeyhole className="h-4 w-4 text-slate-400" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                  />
+                <div className="mt-8 space-y-5">
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-700">E-Mail</span>
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <Mail className="h-4 w-4 text-slate-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                        placeholder="name@firma.de"
+                        autoComplete="email"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-700">Passwort</span>
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <LockKeyhole className="h-4 w-4 text-slate-400" />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                        placeholder="••••••••"
+                        autoComplete="current-password"
+                      />
+                    </div>
+                  </label>
                 </div>
-              </label>
-            </div>
 
-            {error ? (
-              <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-                {error}
-              </p>
-            ) : null}
+                {error ? (
+                  <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                    {error}
+                  </p>
+                ) : null}
 
-            <button
-              type="submit"
-              disabled={loading || !email.trim() || !password}
-              className="mt-6 w-full rounded-2xl bg-[#00B050] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#00963f] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Anmeldung laeuft..." : "Einloggen"}
-            </button>
-          </form>
+                <button
+                  type="submit"
+                  disabled={loading || !email.trim() || !password}
+                  className="mt-6 w-full rounded-2xl bg-[#00B050] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#00963f] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? "Anmeldung läuft..." : "Einloggen"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setForgotMode(true); setError(""); }}
+                  className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700"
+                >
+                  Passwort vergessen?
+                </button>
+              </form>
+            )}
+          </div>
         </section>
       </div>
     </main>
